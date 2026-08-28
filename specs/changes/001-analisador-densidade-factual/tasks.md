@@ -196,6 +196,103 @@ escala de 0 a 100. Três camadas falharam; a correção cobre as três.
       (~702 tokens medidos) e informa que ela fica abaixo do prefixo mínimo do
       modelo. Antes era método público sem uso.
 
+### Rodada da aplicação utilizável (2026-08-28)
+
+O motor passou a ser alcançável por HTTP e por tela. Quatro decisões de
+implementação divergem do que `design.md` especifica e precisam de
+reconciliação:
+
+- [ ] ⚠️ **MUDANÇA DE CONTRATO — `AnalyzeUrlDeps` ganhou o campo `config`**
+      (`methodologyUrl`, `model`, `maxAnalyzableSentences`). O contrato em
+      `design.md` § API Contracts não previa de onde o caso de uso tiraria
+      esses três valores. Ler `env` de dentro do core violaria a ADR-001, e
+      nenhuma porta os carrega — então entram por injeção como o resto.
+- [ ] ⚠️ **MUDANÇA DE CONTRATO — `ClaimClassifier.estimateInputTokens` é
+      método OPCIONAL da porta.** Sem ele o pré-flight do budget guard não tem
+      de onde tirar a estimativa. Opcional porque um motor local não gasta
+      token e um stub não precisa fingir que gasta; quem não implementa cai
+      numa aproximação por caracteres, declarada e grosseira. O
+      `HybridClassifier` passa a delegar contando apenas o que escalaria.
+- [ ] ⚠️ **`AnalysisError` ganhou `retryAfterSeconds`.** O acceptance criteria
+      exige `Retry-After` em `RATE_LIMITED` e `BUDGET_EXCEEDED`, mas a borda
+      HTTP só recebe a exceção — e as guardas já calculam o valor. Sem isso, a
+      alternativa era a rota inventar um número.
+- [ ] **`NoopSuggestionWriter`** ocupa o lugar do `ClaudeSuggestionWriter`, que
+      não existe. Devolve lista vazia em vez de lançar: ausência de sugestão
+      não é falha, e marcar `suggestionsDegraded` diria ao usuário que algo
+      quebrou quando nada quebrou.
+- [ ] **`extensionAlias` no `next.config.ts`.** O projeto importa com extensão
+      `.js` em arquivos `.ts` — convenção que `tsc`, `vitest` e `tsx` já
+      entendiam e que o resolvedor do webpack não. Sem isso `next build`
+      falha com `Module not found` no primeiro import da rota.
+
+**A armadilha do `NODE_ENV` era real e foi verificada, não presumida.**
+`AllowAllRateLimiter` e `UnlimitedBudgetGuard` lançam sob
+`NODE_ENV=production`, e `next build` roda exatamente assim. Provado em
+execução: importar `container.ts` sob `NODE_ENV=production` não faz nada;
+chamar `getAnalyzeUrl()` lança `AllowAllRateLimiter`. É a instanciação
+preguiçosa que faz o build passar — e a guarda continua valendo onde importa,
+derrubando o primeiro request de um deploy sem os adapters de Redis.
+
+### Correções da revisão da rodada 1 (2026-08-28)
+
+A revisão achou 1 crítico e 8 avisos. Sete foram corrigidos; dois seguem
+abertos e estão listados no fim.
+
+- [ ] **Bug crítico de CSS que passou por revisão de código.**
+      `.text mark { background: transparent }` tem especificidade (0,1,1) e
+      vencia `.cat-*`, de (0,1,0). Todo destaque no texto ficava sem fundo,
+      enquanto a LEGENDA — outro seletor, sem colisão — mostrava as cores.
+      A tela não parecia quebrada; parecia decisão de design. O reset desceu
+      para o seletor de elemento `mark`, de (0,0,1).
+      **A lição é sobre verificação, não sobre CSS:** o bug entrou por leitura
+      de código e só sairia por execução. Agora há
+      `tests/adapters/ui/highlight-cascade.test.ts`, que resolve a cascata com
+      `jsdom` — confirmado que ele REPRODUZ o bug na versão antiga, ou seja, é
+      um oráculo que sabe falhar.
+- [ ] **`INTERNAL_ERROR` saiu de dentro de um objeto anônimo** e virou o tipo
+      `UnexpectedErrorBody`, separado de `KnownErrorBody`. NÃO foi acrescentado
+      a `AnalysisErrorCode`: aquela união enumera o que o produto sabe tratar,
+      e o 500 é exatamente o que ele não sabe. Diluir um no outro faria a
+      checagem de exaustividade do mapa de status cobrir um caso que ela não
+      pode cobrir.
+- [ ] **"Não analisável" e "não coube no limite" deixaram de renderizar
+      idênticas.** Numa análise truncada, sentenças analisáveis fora do cap
+      herdavam o rótulo "Fora da análise (título, lista, fragmento)" — razão
+      falsa sobre elas. Novo estado `unanalyzed`, com estilo e rótulo próprios,
+      e legenda que descreve só o que a tela contém.
+- [ ] **O invariante score+breakdown da ADR-004 passou a ser do TIPO.**
+      `buildScorePanel` devolve uma união em que a variante `scored` carrega os
+      dois campos no mesmo valor, e a variante `unscored` não tem campo
+      numérico algum. Antes eram dois condicionais independentes no JSX que
+      dependiam de disciplina para concordar.
+      **Decisão deliberada:** NÃO foi instalado `@testing-library/react`. A
+      lógica saiu para `src/components/report-model.ts`, sem React, testada em
+      `tests/contract/report-model.test.ts` — o teste trava a REGRA, não a
+      marcação, e sobrevive ao redesign do M3.
+- [ ] **Falha de `countTokens` deixou de derrubar a análise.** Degrada para a
+      aproximação por caracteres. Não abre buraco no teto: a aproximação é
+      conservadora e nunca zero, então o `BudgetGuard` segue decidindo sobre um
+      número da ordem certa. E não esconde falha — se o provedor caiu, a
+      classificação logo abaixo cai também, e o erro passa a vir da operação
+      que importa em vez de uma chamada gratuita e auxiliar.
+- [ ] **`resetContainer()` removido** — era dead code, exportado sem consumidor.
+- [ ] **`makeHarness` deixou de devolver referências fantasma.** Ele criava as
+      instâncias antes de `deps` aplicar `...overrides`, então um teste que
+      sobrescrevesse uma porta e asseverasse sobre a referência devolvida
+      inspecionava um objeto que o pipeline nunca tocou — e passava. Agora as
+      referências saem de `deps`, depois do spread.
+
+**Ainda em aberto, conscientemente:**
+
+- [ ] **"Disclaimer acima da dobra" não tem teste.** É requisito posicional e
+      não há como verificá-lo sem navegador. A PRESENÇA da ressalva no payload
+      tem teste de contrato; a POSIÇÃO na tela não tem, e fica assim até o M3.
+      Registrado em vez de coberto por um teste que fingiria verificá-lo.
+- [ ] **`x-forwarded-for` é confiado sem verificação** — rodada 3, junto com o
+      rate limiter de Redis. `clientKeyOf` em `route.ts` é o ponto único a
+      endurecer.
+
 ### 🔬 RESULTADO DA CALIBRAÇÃO (2026-08-28) — a premissa da ADR-002 não se sustenta
 
 Primeira execução do pipeline completo sobre corpus real: 11 artigos
@@ -367,13 +464,13 @@ Split registrado em `.spec.yaml` § `subagents`.
 - [x] `tests/core/scoring/compute-score.test.ts` — tabela cobrindo os 3 casos de borda
 - [x] `src/adapters/ratelimit/allow-all-rate-limiter.ts` (dev)
 - [x] `src/adapters/budget/unlimited-budget-guard.ts` (dev)
-- [ ] `src/core/usecases/analyze-url.ts`
-- [ ] `tests/helpers/stub-ports.ts`
-- [ ] `tests/core/usecases/analyze-url.test.ts` — todas as portas stubadas
-- [ ] **Teste de ordem: `budgetGuard.authorize` é chamado antes de `classifier.classify`**
-- [ ] `src/adapters/config/container.ts`
-- [ ] `src/app/api/analyze/route.ts` — runtime `nodejs`, mapa de status com exaustividade
-- [ ] `tests/contract/analyze-response.test.ts` — falha se faltar `methodology`, `scoreVersion` ou `breakdown`
+- [x] `src/core/usecases/analyze-url.ts`
+- [x] `tests/helpers/stub-ports.ts`
+- [x] `tests/core/analyze-url.test.ts` — todas as portas stubadas (caminho difere da spec: sem subpasta `usecases/`)
+- [x] **Teste de ordem: `budgetGuard.authorize` é chamado antes de `classifier.classify`** — verifica a sequência inteira, não só esse par
+- [x] `src/adapters/config/container.ts` — instanciação PREGUIÇOSA, ver débito abaixo
+- [x] `src/app/api/analyze/route.ts` — runtime `nodejs`; o mapa vive em `error-status.ts` (arquivo de rota do Next restringe exports)
+- [x] `tests/contract/analyze-payload.test.ts` — falha se faltar `methodology`, `scoreVersion` ou `breakdown`
 
 ### Calibração — acceptance criteria do marco
 
@@ -448,9 +545,9 @@ Critério de teste conforme `conventions.md` § TDD Skip Criteria. Tudo aqui tem
 - [ ] `intl-sentence-segmenter` — casos de quebra difícil em PT-BR
 - [ ] `readability-extractor` — um fixture por modo de falha
 - [ ] `http-content-fetcher` — suite de SSRF, incluindo redirect
-- [ ] `analyze-url` — portas stubadas, incluindo teste de ordem das guardas
+- [x] `analyze-url` — portas stubadas, incluindo teste de ordem das guardas
 - [ ] `redis-budget-guard` — janelas com `FixedClock`
-- [ ] Contrato da resposta — campos obrigatórios de ADR-004
+- [x] Contrato da resposta — campos obrigatórios de ADR-004
 - [ ] Regra de lint do core dispara em import proibido
 
 ---

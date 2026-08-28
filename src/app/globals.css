@@ -1,10 +1,281 @@
-/* Placeholder de M1. A direcao visual e do Designer em M3. */
+/*
+ * Estilo mínimo e provisório. A direção visual é do Designer em M3, que segue
+ * bloqueado pela ADR-007 — a escala do score pode mudar, e desenhar a
+ * apresentação sobre uma régua instável é retrabalho garantido.
+ *
+ * O que está aqui não é decisão de design: é o suficiente para a tela ser
+ * legível e para os requisitos de CONTRATO da ADR-004 serem cumpríveis.
+ */
 :root {
   color-scheme: light dark;
+
+  --fg: #16181d;
+  --fg-muted: #5b6472;
+  --bg: #ffffff;
+  --bg-soft: #f5f6f8;
+  --border: #d9dde3;
+
+  --sourced: #1a7f4b;
+  --sourced-bg: #dff3e6;
+  --unsourced: #9a6207;
+  --unsourced-bg: #fdf0d5;
+  --opinion: #3f5bbf;
+  --opinion-bg: #e4e9fa;
+  --danger: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e8eaed;
+    --fg-muted: #a2abb8;
+    --bg: #14161a;
+    --bg-soft: #1d2026;
+    --border: #333942;
+
+    --sourced: #6ede9f;
+    --sourced-bg: #16311f;
+    --unsourced: #e8b45c;
+    --unsourced-bg: #33260e;
+    --opinion: #9db0f0;
+    --opinion-bg: #1c2340;
+    --danger: #f0837b;
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  line-height: 1.5;
+  line-height: 1.55;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.page {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 5rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+}
+
+.tagline {
+  margin: 0 0 1.25rem;
+  color: var(--fg-muted);
+}
+
+/* ADR-004: a ressalva de metodologia é requisito de contrato e fica acima da
+   dobra, antes de qualquer número — não em rodapé. */
+.disclaimer {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--fg-muted);
+  background: var(--bg-soft);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.disclaimer strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+input[type='url'] {
+  flex: 1 1 22rem;
+  padding: 0.65rem 0.8rem;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+button {
+  padding: 0.65rem 1.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--fg);
+  border-radius: 6px;
+  background: var(--fg);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.progress,
+.card,
+.error {
+  margin-top: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.1rem 1.25rem;
+}
+
+.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.progress ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+}
+
+/* O score e o breakdown vivem no MESMO cartão. Separá-los permitiria que um
+   print, um redesign ou um scroll mostrassem o número sozinho — que é
+   exatamente o que a ADR-004 proíbe. */
+.score-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.score-value {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.score-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.score-scale {
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+}
+
+.breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.6rem;
+  margin-top: 1.1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border);
+}
+
+.breakdown div {
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+}
+
+.breakdown dt {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.breakdown dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/*
+ * Neutraliza o amarelo padrão que o navegador aplica a `mark`.
+ *
+ * Fica num seletor de ELEMENTO, de especificidade (0,0,1), e não em
+ * `.text mark`, de (0,1,1). A versão anterior vencia as regras `.cat-*`, de
+ * (0,1,0), e pintava todo highlight de transparente — a legenda mostrava as
+ * cores e o texto não. Há teste travando esta cascata.
+ */
+mark {
+  background: transparent;
+  color: inherit;
+}
+
+.cat-SOURCED {
+  background: var(--sourced-bg);
+  color: var(--sourced);
+}
+.cat-UNSOURCED {
+  background: var(--unsourced-bg);
+  color: var(--unsourced);
+}
+.cat-OPINION {
+  background: var(--opinion-bg);
+  color: var(--opinion);
+}
+
+.meta {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+
+.notice {
+  margin-top: 0.85rem;
+  font-size: 0.85rem;
+  background: var(--unsourced-bg);
+  color: var(--unsourced);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 2rem 0 0.5rem;
+}
+
+.legend {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.legend span {
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+}
+
+.text {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.1rem 1.25rem;
+}
+
+.text mark {
+  border-radius: 3px;
+  padding: 0.05rem 0.15rem;
+}
+
+.text .excluded {
+  color: var(--fg-muted);
+}
+
+/*
+ * Analisável, mas fora do cap de truncagem — visualmente distinta de
+ * `.excluded`, que é o que o segmentador descartou. São ausências diferentes
+ * e não podem parecer a mesma coisa.
+ */
+.unanalyzed {
+  color: var(--fg-muted);
+  /* Longhand, não shorthand: o `jsdom` do teste de cascata não parseia
+     shorthand contendo `var()`, e um estilo que o teste não enxerga é um
+     estilo que ninguém garante. */
+  border-bottom-width: 1px;
+  border-bottom-style: dashed;
+  border-bottom-color: var(--border);
 }

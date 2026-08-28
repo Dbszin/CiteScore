@@ -38,6 +38,14 @@ export class AnalysisError extends Error {
     /** Mensagem para o usuário final: acionável, sem detalhe interno. */
     readonly userMessage: string,
     override readonly cause?: unknown,
+    /**
+     * Segundos até valer a pena tentar de novo. `null` quando não se aplica
+     * ou quando a guarda não sabe dizer.
+     *
+     * Existe no erro, e não só na decisão da guarda, porque é a borda HTTP
+     * que precisa dele (cabeçalho `Retry-After`) e ela só recebe a exceção.
+     */
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(`${code}: ${userMessage}`);
     this.name = 'AnalysisError';
@@ -86,6 +94,7 @@ export const USER_MESSAGES: Record<AnalysisErrorCode, string> = {
 export function analysisError(
   code: AnalysisErrorCode,
   cause?: unknown,
+  retryAfterSeconds: number | null = null,
 ): AnalysisError {
-  return new AnalysisError(code, USER_MESSAGES[code], cause);
+  return new AnalysisError(code, USER_MESSAGES[code], cause, retryAfterSeconds);
 }

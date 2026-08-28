@@ -24,4 +24,21 @@ export interface ClaimClassifier {
     sentences: readonly Sentence[],
     content: ExtractedContent,
   ): Promise<ClassificationResult>;
+
+  /**
+   * Pré-mede os tokens de entrada, para o `BudgetGuard` decidir ANTES de
+   * gastar. Opcional porque nem todo classificador tem como contar — um
+   * motor puramente local não gasta token nenhum, e um stub de teste não
+   * precisa fingir que gasta.
+   *
+   * Quem implementa deve contar pelo provedor (`countTokens`), nunca por
+   * `tiktoken`: é de outro provedor e mede outro tokenizador.
+   *
+   * DÉBITO DE SPEC: acréscimo posterior ao contrato de `design.md`. Sem ele
+   * o pré-flight de custo não teria de onde tirar a estimativa.
+   */
+  estimateInputTokens?(
+    sentences: readonly Sentence[],
+    content: ExtractedContent,
+  ): Promise<number>;
 }

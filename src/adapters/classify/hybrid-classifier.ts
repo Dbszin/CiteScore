@@ -77,6 +77,32 @@ export class HybridClassifier implements ClaimClassifier {
   }
 
   /**
+   * Delega a contagem ao LLM, mas só sobre o que de fato escalaria — que é
+   * exatamente o lote que `classify` enviaria. Contar o texto inteiro
+   * superestimaria o pré-flight e recusaria análises que caberiam no teto.
+   *
+   * Se o LLM subjacente não sabe contar, cai na mesma aproximação por
+   * caracteres do caso de uso — grosseira, mas melhor que zero, que
+   * autorizaria qualquer gasto.
+   */
+  async estimateInputTokens(
+    sentences: readonly Sentence[],
+    content: ExtractedContent,
+  ): Promise<number> {
+    const toEscalate = sentences.filter(
+      (sentence) =>
+        sentence.analyzable &&
+        this.prefilter.evaluate(sentence, content).kind === 'escalate',
+    );
+    if (toEscalate.length === 0) return 0;
+    if (typeof this.llm.estimateInputTokens !== 'function') {
+      const chars = toEscalate.reduce((sum, s) => sum + s.text.length, 0);
+      return Math.ceil(chars / 3.5);
+    }
+    return this.llm.estimateInputTokens(toEscalate, content);
+  }
+
+  /**
    * Fração de sentenças analisáveis que escalaria ao LLM, sem gastar nada.
    *
    * A ADR-002 estabelece meta de <= 50%. Como o pré-filtro é determinístico e
