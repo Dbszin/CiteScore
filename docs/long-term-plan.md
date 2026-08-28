@@ -52,21 +52,41 @@ Datas são **alvo agressivo**, não compromisso. O usuário pediu "o quanto ante
    - Variáveis de ambiente e acesso à Claude API configurados
    - Acceptance criteria: `npm run dev` sobe a aplicação e existe spec aprovada antes de qualquer código de produto.
 
-2. **M2 — Motor de análise (o risco real)** — Target: 2026-09-05 · ⚠️ **PARCIAL E BLOQUEADO**
-   - Feito e testado: fetch com defesas de SSRF, extração, decodificação de
-     charset, guarda de página-índice, segmentação, pré-filtro de regras e
-     cálculo do score.
-   - Bloqueado: classificação LLM, caso de uso, rota e calibração — todos
-     dependem de `ANTHROPIC_API_KEY`, ausente do ambiente. O bloqueio não é
-     técnico nosso, e a data de 09-05 não se sustenta enquanto ele durar.
+2. **M2 — Motor de análise (o risco real)** — ✅ **CONCLUÍDO em 2026-08-28** · a arquitetura do motor caiu no caminho
+   - Pipeline completo entregue e rodando em artigos reais: fetch com defesas
+     de SSRF, extração, charset, guarda de página-índice, segmentação,
+     classificação LLM e score.
+   - **A calibração derrubou a premissa do motor:** o pré-filtro resolve 0,3%
+     dos casos, não os 50% da ADR-002. O motor é LLM puro na prática. O change
+     002 formaliza isso e ainda não foi implementado.
+   - **Custo medido:** US$ 0,05 por artigo, 7x a projeção.
+   - **Pendente do acceptance criteria:** a conferência manual das 331
+     sentenças do CSV, e rodar o corpus completo (OQ-3).
    - Fetch de URL + extração de conteúdo principal
    - Segmentação em sentenças
    - Pré-filtro determinístico das 3 categorias
    - Classificação LLM dos casos ambíguos
    - Cálculo do score e do breakdown
+   - **O motor virou aplicação:** caso de uso, container e rota HTTP entregues.
+     Uma URL entra pela tela e o relatório sai. Verificado em uso real.
+   - **Custo real medido pela rota: US$ 0,0155 por artigo** — 3x menor que os
+     US$ 0,05 da calibração, que media artigos maiores.
+   - **Pendente, e não bloqueia nada:** a conferência manual das 331 sentenças
+     do CSV.
    - Acceptance criteria: rodando em ~10 artigos reais e diversos, a classificação é conferida manualmente e considerada aceitável; o custo por análise é medido e conhecido.
 
-3. **M3 — Relatório (UI)** — Target: 2026-09-12 · depende de M2 fechar
+3. **M3 — Relatório (UI)** — Target: 2026-09-12 · ⛔ **BLOQUEADO, com uma tela provisória já no ar**
+   - Bloqueado pela [ADR-007](../specs/decisions/007-escala-do-score.md): a
+     escala do score pode mudar, e desenhar a apresentacao sobre uma regua
+     instavel e retrabalho garantido. Destrava com a OQ-3.
+   - **Existe uma tela funcional, construída de propósito como provisória.**
+     Ela respeita o bloqueio: nenhuma decisão de design foi tomada sobre a
+     apresentação do score. O que ela cumpre são os requisitos de **contrato**
+     da ADR-004, que independem de direção visual — score nunca sem breakdown
+     (garantido pelo tipo), ressalva acima da dobra, "Densidade Factual" como
+     rótulo primário.
+   - O que segue bloqueado é o marco de verdade: Designer, design system e a
+     apresentação final do score.
    - Design spec do Designer
    - Score + breakdown por categoria
    - Highlight inline por sentença
@@ -74,7 +94,11 @@ Datas são **alvo agressivo**, não compromisso. O usuário pediu "o quanto ante
    - Copy de honestidade do score visível, não escondida em rodapé
    - Acceptance criteria: uma URL real entra e o relatório completo é renderizado, com a natureza estimada do score clara para quem nunca viu o produto.
 
-4. **M4 — Hardening + deploy** — Target: 2026-09-17 · tem bloqueador próprio já identificado (TOCTOU)
+4. **M4 — Hardening + deploy** — Target: 2026-09-17 · ⬅️ **É AQUI QUE O PROJETO ESTÁ. É o que separa o produto do link da Vercel.**
+   - Três bloqueadores de deploy: rate limiter (Redis), budget guard (Redis) e
+     TOCTOU/DNS rebinding.
+   - Hoje um deploy **falha no primeiro request, de propósito** — a guarda
+     `assertNotProduction` derruba os adapters de desenvolvimento em produção.
    - Rate limiting por IP (e/ou desafio anti-bot)
    - Cap de tamanho de conteúdo analisado
    - Budget guard de gasto com LLM
@@ -90,12 +114,37 @@ Datas são **alvo agressivo**, não compromisso. O usuário pediu "o quanto ante
 - Projeto multi-sessão: o contexto precisa sobreviver a intervalos entre sessões
 - Framework de UI e provider de deploy ainda não decididos (Architect/Designer)
 
-**Atualizado em 2026-08-28:**
+**Atualizado ao fim de 2026-08-28 (segunda atualização do dia):**
 
-- O repositório **não está mais vazio**: commit `7d69fa7` em `origin/main`, 118 arquivos.
-- A assunção de LLM = Claude API segue **não contestada e não confirmada**; o modelo default é `claude-opus-5`, trocável por variável de ambiente.
-- **`ANTHROPIC_API_KEY` ausente do ambiente** é hoje a restrição mais dura do projeto: bloqueia o classificador e a calibração de M2.
-- Runtime confirmado como **Node**, não Edge — o Readability precisa de implementação de DOM.
+- **6 commits publicados, versão 0.4.0.** O projeto deixou de ser "motor sem
+  aplicação": `POST /api/analyze` responde e a tela em `/` entrega o relatório.
+- **O custo real caiu para um terço do estimado.** US$ **0,0155** por artigo,
+  medido pela rota, contra os US$ 0,05 da calibração. O teto aprovado de
+  US$ 1/dia comporta ~65 análises, não ~20.
+- **O que falta para publicar são três itens de M4**, todos conhecidos e
+  especificados: rate limiter e budget guard com Upstash Redis, e o TOCTOU.
+- **A guarda de produção funciona como projetada, e isso foi verificado em
+  execução:** importar o container sob `NODE_ENV=production` não faz nada;
+  construí-lo lança. É a instanciação preguiçosa que permite `next build`
+  passar, sem desligar a defesa onde ela importa.
+- **Uma lição de verificação, cara o suficiente para registrar aqui:** um bug
+  de especificidade de CSS anulava o destaque inline — o recurso P0 que torna
+  o resultado acionável — e passou por revisão de código. A tela não parecia
+  quebrada; parecia uma decisão de design. Entrou por leitura, só sairia por
+  execução. É o mesmo padrão dos três bugs de regex das tabelas de sinais.
+
+**Atualizado ao fim de 2026-08-28 (primeira atualização):**
+
+- **5 commits publicados**, versão 0.3.0.
+- **`ANTHROPIC_API_KEY` presente** em `.env.local`. Modelo em uso:
+  `claude-haiku-4-5` (OQ-1 respondida). **Pendente: rotacionar a chave**, que
+  transitou por arquivo versionado durante o incidente desta sessão.
+- **O "motor híbrido" descrito em Scope não existe na prática.** Ver
+  [ADR-006](../specs/decisions/006-prefiltro-deixa-de-decidir.md): o
+  pré-filtro passa a anotar, não a decidir.
+- Runtime confirmado como **Node**, não Edge — o Readability precisa de DOM.
+- **A restrição mais dura hoje não é técnica:** é a falta de base empírica
+  para a escala do score, que mantém M3 bloqueado.
 
 ## Risks
 
@@ -105,7 +154,7 @@ Datas são **alvo agressivo**, não compromisso. O usuário pediu "o quanto ante
 | O score afirma correlação com citabilidade em AI sem que ela tenha sido medida | high | high | Rotular como estimativa derivada de densidade factual em toda a UI; nunca prometer citação medida; validação real fica no roadmap |
 | Classificação por sentença fica imprecisa e o produto perde credibilidade | medium | high | Acceptance criteria de M2 exige conferência manual em ~10 artigos reais antes de construir a UI |
 | Extração de conteúdo falha em sites com paywall, JS-heavy ou boilerplate agressivo | high | medium | Tratamento explícito de erro em M4; delimitar tipos de página suportados no v1 |
-| Custo por análise só é descoberto tarde e inviabiliza o produto gratuito | medium | high | Medir custo por análise já em M2, como parte do acceptance criteria |
+| Custo por análise só é descoberto tarde e inviabiliza o produto gratuito | ~~medium~~ **baixa** | ~~high~~ **medium** | **Resolvido por medição:** US$ 0,0155/artigo pela rota real. O teto de US$ 1/dia comporta ~65 análises. Deixa de ser risco de viabilidade e vira parâmetro de operação |
 | Prazo agressivo ("o quanto antes") comprime a calibração do classificador | medium | medium | M2 é o marco que não deve ser cortado; se algo escorregar, cortar escopo de M3, não a validação de M2 |
 | Contexto se perde entre sessões e o projeto reinicia do zero | medium | medium | Estes quatro artefatos, atualizados ao fim de cada sessão |
 
@@ -129,3 +178,41 @@ Reavaliação à luz do que a primeira sessão de implementação mediu:
 | Suíte de testes reporta verde sem ter validado nada | — | high | Já materializou-se: 16 testes ficavam `skipped` em clone limpo. Corrigido com fixtures mínimas versionadas + falha sob `CI=true` |
 | Conteúdo PT-BR em latin-1 corrompe os sinais acentuados | high | high | Corrigido: decodificação respeita o charset declarado. Vale notar que o benchmark do `opencode` já havia sinalizado isso de forma independente |
 | Código e ADRs divergem por correção direta no código | high | medium | 21 itens de débito registrados no topo de `specs/.../tasks.md`. Débito aceito conscientemente; visível, não enterrado |
+
+---
+
+## Risco materializado em 2026-08-28
+
+O risco "classificacao imprecisa e o produto perde credibilidade" foi medido, e
+o resultado foi diferente do esperado: **a classificacao do LLM parece boa** —
+os perfis por artigo fazem sentido, com documentacao tecnica pontuando pouca
+opiniao e blog de SEO pontuando muita. O que falhou foram duas outras coisas:
+
+| O que falhou | Medida | Consequencia |
+|---|---|---|
+| **Premissa do motor hibrido** | Pre-filtro resolve 0,3%, nao 50% | Motor e LLM puro na pratica; change 002 formaliza |
+| **Escala do score** | 3 artigos distintos: 17, 23, 24 | Nao discrimina; M3 bloqueado ate haver base |
+| **Projecao de custo** | US$ 0,05/artigo, nao US$ 0,007 | Defesas de M4 dimensionadas sobre numero errado |
+
+**A licao mais cara, registrada para nao se repetir:** a ADR-002 foi escrita a
+partir de sentencas de EXEMPLO. Sentencas de exemplo contem os marcadores que
+as regras procuram, porque foram escritas para conte-los. Prosa real nao. Toda
+premissa sobre "o texto costuma ter X" precisa ser medida em corpus antes de
+virar arquitetura.
+
+Uma consequencia positiva vale registro: a arquitetura hexagonal da ADR-001 se
+provou. Inverter a responsabilidade central do motor — de decisor por regra
+para LLM puro — nao atravessa a fronteira do dominio. A porta `ClaimClassifier`
+nao muda.
+
+---
+
+## Riscos revisados em 2026-08-28, depois da aplicação existir
+
+| Risk | Antes | Agora | O que mudou |
+|------|-------|-------|-------------|
+| Endpoint público com LLM é abusado e esgota a cota | high/high | **high/high** (mantido, agora dimensionado) | O custo real de US$ 0,0155 significa que 1.000 requisições abusivas custam ~US$ 15, não ~US$ 50. Continua inaceitável sem guarda — e a guarda `assertNotProduction` impede fisicamente o deploy sem ela |
+| Extração falha em paywall / JS-heavy / boilerplate | medium/low | **medium/low** (mantido) | Cada modo de falha tem código de erro e mensagem de usuário. Verificado em real: paywall duro falha no fetch (403), home de portal vira `INDEX_PAGE` |
+| Classificação imprecisa e o produto perde credibilidade | medium/high | **medium/high** (mantido) | A classificação de moz.com faz sentido qualitativamente, mas 331 sentenças seguem sem conferência humana |
+| Prazo comprime a calibração | high/medium | **medium/medium** | M2 fechou. O caminho até o deploy agora é trabalho conhecido, não descoberta |
+| **Bug visual silencioso degrada o produto sem erro nem log** | — | **medium/medium** (NOVO) | Materializou-se: o destaque inline ficou sem cor de fundo e passou por revisão. Mitigado com teste de cascata via `jsdom`, mas a superfície visual não coberta por teste segue grande — e o disclaimer posicional é o exemplo declarado |

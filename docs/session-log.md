@@ -10,6 +10,159 @@ Entradas novas são adicionadas no topo de `## Sessions`. Nunca sobrescrever ent
 
 ## Sessions
 
+### 2026-08-28 — O motor virou aplicação: rota, tela e primeiro uso real
+
+- **Focus:** tirar o projeto do estado "motor sem aplicação". Até aqui o
+  pipeline só rodava por script — não havia rota, caso de uso, container, e
+  `src/app/page.tsx` era um placeholder. O usuário quer testar o produto e
+  publicar na Vercel com link no LinkedIn.
+
+- **Entregue e publicado** (commit `5669c75`, versão **0.4.0**):
+  - `src/core/usecases/analyze-url.ts` — orquestrador do pipeline, todas as
+    portas por injeção
+  - `src/adapters/config/container.ts` — composição real, instanciação
+    **preguiçosa**
+  - `src/app/api/analyze/route.ts` + `error-status.ts` — `POST /api/analyze`,
+    runtime `nodejs`, mapa exaustivo de código de erro para status HTTP
+  - `src/components/analyzer.tsx` + `report-model.ts` — tela mínima funcional
+  - `src/adapters/suggest/noop-suggestion-writer.ts` — ocupa o lugar do
+    `ClaudeSuggestionWriter`, que ainda não existe
+  - **401 testes** (eram 356); tsc, eslint e `next build` verdes
+
+- **Primeiro uso real de ponta a ponta:** `moz.com/learn/seo/what-is-seo`
+  respondeu 200 em 10,7s, score **17**, 175 sentenças / 100 analisáveis,
+  breakdown 15 SOURCED · 65 UNSOURCED · 20 OPINION. Escalação ao LLM de 100%,
+  confirmando a ADR-006 em produção.
+
+- **O custo real caiu para um terço do estimado.** US$ **0,0155** por artigo
+  (4.244 tokens de entrada, 2.261 de saída em `claude-haiku-4-5`), contra os
+  US$ 0,05 da calibração — aquela medição incluía artigos maiores. O teto
+  aprovado de US$ 1/dia passa a comportar ~65 análises, não ~20.
+
+- **As guardas foram verificadas contra alvo real, sem gastar token:**
+  `169.254.169.254` (metadata de nuvem) → 400 `BLOCKED_HOST`; home da Folha →
+  422 `INDEX_PAGE`.
+
+- **A armadilha do `NODE_ENV` era real e foi provada, não presumida.**
+  `AllowAllRateLimiter` e `UnlimitedBudgetGuard` lançam sob
+  `NODE_ENV=production`, e `next build` roda exatamente assim. Verificado em
+  execução: importar `container.ts` em produção não faz nada; chamar
+  `getAnalyzeUrl()` lança. É a instanciação preguiçosa que faz o build passar,
+  e a guarda segue derrubando o primeiro request de um deploy sem Redis.
+
+- **Obstáculo não previsto:** o build falhava com `Module not found`. O projeto
+  importa com extensão `.js` em arquivos `.ts` — convenção que `tsc`, `vitest`
+  e `tsx` entendem e o resolvedor do webpack não. Resolvido com
+  `extensionAlias` no `next.config.ts`.
+
+- **A lição desta sessão, e ela é sobre verificação:**
+  Um **bug de especificidade de CSS passou por revisão de código**. A regra
+  `.text mark { background: transparent }`, de especificidade (0,1,1), vencia
+  as regras `.cat-*`, de (0,1,0). Todo destaque no texto ficava sem fundo —
+  enquanto a **legenda**, que usa outro seletor e não colidia, mostrava as
+  cores normalmente. A tela não parecia quebrada: parecia uma decisão de
+  design. E o destaque inline é o recurso P0 que torna o resultado acionável.
+
+  O bug entrou por leitura de código e só sairia por execução. A correção veio
+  acompanhada de um teste que resolve a cascata com `jsdom` — e, antes de
+  corrigir, foi **confirmado que esse teste REPRODUZ o bug na versão antiga**.
+  Um oráculo que sabe falhar vale; um que só passa depois da correção não
+  prova nada.
+
+  Vale ao lado do outro padrão já registrado neste projeto: os três bugs de
+  regex das tabelas de sinais, todos achados por teste e nenhum por leitura.
+
+- **Revisão: 1 crítico e 8 avisos; 7 corrigidos.** Além do CSS:
+  - `INTERNAL_ERROR` escapava da união fechada dentro de um objeto anônimo que
+    não passava por tipo nenhum. Virou tipo separado — **não** foi acrescentado
+    a `AnalysisErrorCode`, porque aquela união enumera o que o produto sabe
+    tratar e o 500 é exatamente o que ele não sabe
+  - "Não analisável" e "não coube no limite de análise" renderizavam
+    idênticas, e a legenda atribuía à segunda uma razão falsa. Agora são
+    estados distintos
+  - O invariante score+breakdown da ADR-004 dependia de dois condicionais
+    independentes no JSX. Passou a ser garantido pelo **tipo**, em
+    `report-model.ts` — sem React, e testado sem ambiente de DOM
+  - Falha de `countTokens` derrubava a análise inteira por um número que o
+    guard atual descarta. Agora degrada para aproximação conservadora, que
+    nunca é zero
+
+- **Mudanças de contrato registradas como débito** (em `tasks.md`):
+  `AnalyzeUrlDeps.config`, `ClaimClassifier.estimateInputTokens` (opcional),
+  `AnalysisError.retryAfterSeconds`, e o `extensionAlias`.
+
+- **Débito assumido conscientemente, não escondido:**
+  - "Disclaimer acima da dobra" **não tem teste**. É requisito posicional e não
+    há como verificá-lo sem navegador. A *presença* da ressalva no payload tem
+    teste de contrato; a *posição* na tela não tem
+  - `x-forwarded-for` é confiado sem verificação — endurece na rodada 3, junto
+    com o rate limiter real
+
+- **Next:** os três bloqueadores de deploy (rate limiter e budget guard com
+  Upstash Redis, TOCTOU/DNS rebinding). E, ainda pendente do usuário desde o
+  incidente da sessão anterior: **rotacionar a chave da API**.
+
+### 2026-08-28 — A calibração derrubou a premissa central do motor
+
+- **Focus:** executar o acceptance criteria de M2 — rodar o pipeline sobre
+  artigos reais e responder se a classificação é boa. A resposta veio, e
+  invalidou a arquitetura do motor.
+
+- **O achado que define esta sessão:**
+  - **O pré-filtro determinístico resolve 0,3% dos casos.** A meta da ADR-002
+    era 50%. A taxa de escalonamento ao LLM medida foi de **100%** em todos os
+    artigos. O motor híbrido nunca foi híbrido na prática.
+  - Medição sobre **2.149 sentenças analisáveis de 11 artigos reais**:
+    `source_attribution` aparece em **0,4%** das sentenças, e
+    `opinion_first_person` em **zero**.
+  - **Por que falhou:** a regra exigia a CONJUNÇÃO de atribuição com
+    quantidade ou data na mesma sentença. Quando um dos termos ocorre em 0,4%
+    dos casos, a conjunção é matematicamente quase impossível — em prosa real
+    a fonte está numa frase e o número em outra.
+  - **A raiz do erro de projeto:** a ADR-002 foi escrita a partir de sentenças
+    de EXEMPLO. Sentenças de exemplo contêm marcadores explícitos porque foram
+    escritas para contê-los. Prosa real não.
+
+- **Key decisions:**
+  - **ADR-006 — o pré-filtro deixa de decidir e passa a anotar.** O LLM assume
+    a decisão que já tomava. As tabelas de sinais ficam como fonte de
+    explicabilidade: hoje `Classification.signals` está vazio em 100% das
+    classificações reais, porque só a decisão por regra o populava. Ganho de
+    risco: um bug de regex deixa de poder mover o score.
+  - **Afrouxar a regra foi medido e rejeitado.** A variante mais permissiva
+    chega a 19,6%, mas `source_date` carrega quase toda a diferença — e data
+    não é fonte. Compraria cobertura produzindo exatamente o erro que a
+    ADR-002 define como o pior possível.
+  - **ADR-007 — a escala do score mede contra um teto inalcançável.** Artigos
+    de perfis distintos pontuaram 17, 23 e 24. A página do Moz, escolhida no
+    golden dataset como "modelo de bom artigo SEO factual", tirou **24 de
+    100**. A fórmula avalia densidade contra a escala teórica de 0 a 1, onde 1
+    significa toda sentença com fonte; o valor típico medido é 0,175.
+  - **Os pesos NÃO foram alterados.** Mexer neles com 3 artigos repetiria o
+    erro que criou o problema: escolher constante sem dado. Ficou registrado o
+    critério que decide — **ordenação importa mais que amplitude**.
+  - **ADR-005 corrigida:** custo real de **US$ 0,05 por artigo**, 7x acima da
+    projeção, que assumia uma economia de 50% inexistente.
+
+- **Outcomes:**
+  - Três commits publicados; versão **0.3.0**. Total de 5 commits.
+  - `scripts/calibrate.ts` entregue, com teto de custo que **funcionou**:
+    abortou ao detectar um artigo 15x acima da estimativa, tendo gasto US$ 0,15
+    de US$ 0,50 autorizados.
+  - CSV com 331 sentenças classificadas disponível para conferência manual.
+  - Change 002 (`002-motor-llm-puro`) especificado e **não implementado**.
+  - 356 testes passando; typecheck, lint e build verdes.
+  - Antes disso, na mesma sessão: o classificador LLM foi implementado, e um
+    bug que produzia **score 130 numa escala de 0 a 100** foi encontrado pela
+    revisão e corrigido em três camadas antes de qualquer publicação.
+
+- **Next steps:**
+  - **Rotacionar a chave da API** — segue pendente desde o incidente.
+  - Implementar o change 002.
+  - **OQ-3: rodar o corpus completo** (~US$ 0,40) para dar base empírica à
+    ADR-007 e destravar M3.
+  - M3 permanece **bloqueado**: a escala pode mudar.
+
 ### 2026-08-28 — Incidente de segredo + desbloqueio de M2
 
 - **Focus:** ao fim da sessão, ao atualizar os artefatos de longo prazo, foi
