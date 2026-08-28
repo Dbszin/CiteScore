@@ -1,0 +1,130 @@
+[
+  {
+    "id": "en-seo-ahrefs",
+    "url": "https://ahrefs.com/blog/seo-meta-tags/",
+    "lang": "en",
+    "type": "seo-marketing",
+    "description": "Blog post SEO marketing (Ahrefs) — HTML limpo, conteúdo longo, affiliate/CTAs inline esperados",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://ahrefs.com/blog/seo-meta-tags/",
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 886218,
+      "ms": 962,
+      "error": null,
+      "file": "en-seo-ahrefs.html"
+    }
+  },
+  {
+    "id": "en-seo-moz",
+    "url": "https://moz.com/learn/seo/what-is-seo",
+    "lang": "en",
+    "type": "seo-marketing",
+    "description": "Página pilar SEO (Moz) — muito texto, links internos, sidebars de marketing",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://moz.com/learn/seo/what-is-seo",
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 132604,
+      "ms": 133,
+      "error": null,
+      "file": "en-seo-moz.html"
+    }
+  },
+  {
+    "id": "en-tech-mdn",
+    "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Introduction",
+    "lang": "en",
+    "type": "technical-doc",
+    "description": "Documentação técnica (MDN) — código inline, headings hierárquicos, navegação pesada",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Introduction",
+      "contentType": "text/html",
+      "bytes": 207414,
+      "ms": 60,
+      "error": null,
+      "file": "en-tech-mdn.html"
+    }
+  },
+  {
+    "id": "pt-jornal-folha",
+    "url": "https://www.folha.uol.com.br/",
+    "lang": "pt-BR",
+    "type": "journalistic",
+    "description": "Home Folha de S.Paulo — paywall na home, boilerplate UOL pesado. Testa fallback parcial",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://www.folha.uol.com.br/",
+      "contentType": "text/html",
+      "bytes": 868251,
+      "ms": 124,
+      "error": null,
+      "file": "pt-jornal-folha.html"
+    }
+  },
+  {
+    "id": "pt-jornal-g1",
+    "url": "https://g1.globo.com/",
+    "lang": "pt-BR",
+    "type": "journalistic",
+    "description": "Home G1 — boilerplate Globo, mais limpa. Testa extração em index de portal",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://g1.globo.com/",
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 1032091,
+      "ms": 86,
+      "error": null,
+      "file": "pt-jornal-g1.html"
+    }
+  },
+  {
+    "id": "en-paywall-nyt",
+    "url": "https://www.nytimes.com/2025/08/15/business/economy/federal-reserve-interest-rates.html",
+    "lang": "en",
+    "type": "paywall",
+    "description": "Paywall duro (NYT) — deve falhar parcialmente, só ~1-2 parágrafos acessíveis",
+    "fetch": {
+      "status": 403,
+      "finalUrl": "https://www.nytimes.com/2025/08/15/business/economy/federal-reserve-interest-rates.html",
+      "contentType": "text/html;charset=utf-8",
+      "bytes": 771,
+      "ms": 106,
+      "error": null,
+      "file": "en-paywall-nyt.html"
+    }
+  },
+  {
+    "id": "en-spa-vercel",
+    "url": "https://nextjs.org/blog",
+    "lang": "en",
+    "type": "spa-heavy",
+    "description": "Blog index do Next.js — site moderno SSR/SPA, boilerplate típico de framework docs",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://nextjs.org/blog",
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 524336,
+      "ms": 108,
+      "error": null,
+      "file": "en-spa-vercel.html"
+    }
+  },
+  {
+    "id": "en-list-wikipedia",
+    "url": "https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)",
+    "lang": "en",
+    "type": "list-table",
+    "description": "Lista/tabela densa (Wikipedia) — stress test para sentencização de listas",
+    "fetch": {
+      "status": 200,
+      "finalUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)",
+      "contentType": "text/html; charset=UTF-8",
+      "bytes": 677174,
+      "ms": 86,
+      "error": null,
+      "file": "en-list-wikipedia.html"
+    }
+  }
+]

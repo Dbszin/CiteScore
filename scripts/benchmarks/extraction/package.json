@@ -1,0 +1,11 @@
+{
+  "name": "citescore-extraction-bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@extractus/article-extractor": "^7.0.6",
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^25.0.1"
+  }
+}

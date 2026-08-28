@@ -1,0 +1,65 @@
+id: 001-analisador-densidade-factual
+title: Analisador de Densidade Factual (v1)
+status: active
+created: 2026-08-27
+updated: 2026-08-27
+author: "@Dbszin"
+type: feature
+priority: P1
+
+milestones:
+  - id: M1
+    name: Fundação
+    target: 2026-08-29
+  - id: M2
+    name: Motor de análise
+    target: 2026-09-05
+  - id: M3
+    name: Relatório (UI)
+    target: 2026-09-12
+  - id: M4
+    name: Hardening + deploy
+    target: 2026-09-17
+
+decisions:
+  - specs/decisions/001-arquitetura-hexagonal.md
+  - specs/decisions/002-motor-hibrido.md
+  - specs/decisions/003-formula-do-score.md
+  - specs/decisions/004-honestidade-como-contrato.md
+  - specs/decisions/005-modelo-llm-e-custo.md
+
+subagents:
+  approved: true
+  note: >-
+    Paralelizável SOMENTE depois que M1 congelar os arquivos de porta em
+    src/core/ports/. Antes disso os componentes compartilham os tipos de domínio
+    e paralelizar cria conflito.
+  components:
+    - name: adapter-extracao
+      scope: "HttpContentFetcher + ReadabilityExtractor: buscar URL e extrair conteúdo principal"
+      files: "src/adapters/fetch/**, src/adapters/extract/**, tests/adapters/extract/**"
+      constraints: "Não tocar em src/core/**, src/adapters/classify/**, src/app/**"
+    - name: adapter-segmentacao
+      scope: "IntlSentenceSegmenter: segmentar texto em sentenças analisáveis"
+      files: "src/adapters/segment/**, tests/adapters/segment/**"
+      constraints: "Não tocar em src/core/**, outros adapters"
+    - name: adapter-prefiltro-regras
+      scope: "RulePrefilter + tabelas de sinais PT-BR: classificação determinística"
+      files: "src/adapters/classify/rule-prefilter.ts, src/adapters/classify/signals/**, tests/adapters/classify/rules/**"
+      constraints: "Não tocar em claude-classifier.ts nem hybrid-classifier.ts"
+    - name: adapter-classificador-llm
+      scope: "ClaudeClassifier: classificação via messages.parse + zodOutputFormat"
+      files: "src/adapters/classify/claude-classifier.ts, src/adapters/classify/prompts/**, tests/adapters/classify/llm/**"
+      constraints: "Não tocar em rule-prefilter.ts; consumir apenas a porta ClaimClassifier"
+
+open_questions:
+  - id: OQ-1
+    question: "Confirmar claude-opus-5 como modelo, ou descer de tier para cortar ~5x o custo?"
+    owner: usuário
+    blocks: M2
+    default: "claude-opus-5"
+  - id: OQ-2
+    question: "Aceita depender de Upstash Redis (free tier) para rate limit e budget guard?"
+    owner: usuário
+    blocks: M4
+    default: "Sim — in-memory não funciona em serverless"

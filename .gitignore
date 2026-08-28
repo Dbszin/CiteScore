@@ -1,0 +1,27 @@
+# deps
+node_modules/
+
+# next
+.next/
+out/
+next-env.d.ts
+
+# env
+.env
+.env.local
+.env.*.local
+
+# build / cache
+*.tsbuildinfo
+.vitest/
+coverage/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Benchmark de extracao: os scripts, urls.js, package.json e os JSONs de
+# data/extracted/ SAO versionados (evidencia reproduzivel).
+# Os HTMLs crus (~4 MB) e o node_modules local, nao.
+scripts/benchmarks/**/node_modules/
+scripts/benchmarks/extraction/data/raw/*.html

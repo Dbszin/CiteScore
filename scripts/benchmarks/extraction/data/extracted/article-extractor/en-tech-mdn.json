@@ -1,0 +1,14 @@
+{
+  "id": "en-tech-mdn",
+  "parseMs": 217,
+  "title": "Introduction - JavaScript | MDN",
+  "description": "What you should already know    This guide assumes you have the following basic background:  A general understanding of the Internet and the World Wide Web (WWW). Good working knowledge of HyperText Markup...",
+  "lang": null,
+  "author": "MozDevNet",
+  "image": "https://developer.mozilla.org/mdn-social-image.46ac2375.png",
+  "textLength": 10349,
+  "wordCount": 1583,
+  "linksCount": 38,
+  "headingsCount": 12,
+  "firstChars": "What you should already know This guide assumes you have the following basic background: A general understanding of the Internet and the World Wide Web ( WWW ). Good working knowledge of HyperText Markup Language ( HTML ). Some programming experience. If you are new to programming, try one of the tutorials linked on the main page about JavaScript . Where to find JavaScript information The JavaScri"
+}

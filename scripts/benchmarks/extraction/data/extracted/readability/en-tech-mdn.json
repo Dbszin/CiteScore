@@ -1,0 +1,16 @@
+{
+  "id": "en-tech-mdn",
+  "readerable": true,
+  "parseMs": 407,
+  "title": "Introduction - JavaScript | MDN",
+  "byline": null,
+  "lang": "en-US",
+  "excerpt": "This chapter introduces JavaScript and discusses some of its fundamental concepts.",
+  "siteName": "MDN Web Docs",
+  "publishedTime": null,
+  "textLength": 10394,
+  "wordCount": 1534,
+  "linksCount": 36,
+  "headingsCount": 11,
+  "firstChars": "\n            \n    What you should already know\n    This guide assumes you have the following basic background:\n\nA general understanding of the Internet and the World Wide Web (WWW).\nGood working knowledge of HyperText Markup Language (HTML).\nSome programming experience. If you are new to programming, try one of the tutorials linked on the main page about JavaScript.\n\n  \n    Where to find JavaScrip"
+}
