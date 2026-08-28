@@ -1,0 +1,37 @@
+id: 002-motor-llm-puro
+title: Pré-filtro deixa de decidir; motor passa a LLM puro na classificação
+status: active
+created: 2026-08-28
+updated: 2026-08-28
+author: "@Dbszin"
+type: refactor
+priority: P0
+
+origem: >-
+  Calibração de 2026-08-28 sobre 2.149 sentenças de 11 artigos reais. O
+  pré-filtro determinístico resolveu 0,3% dos casos contra a meta de 50% da
+  ADR-002. A premissa do motor híbrido não se sustenta em prosa real.
+
+decisions:
+  - specs/decisions/006-prefiltro-deixa-de-decidir.md
+  - specs/decisions/007-escala-do-score.md
+
+supersede_parcial:
+  - specs/decisions/002-motor-hibrido.md
+
+bloqueia:
+  - "M3 (UI): a escala do score pode mudar (ADR-007); o Designer precisa saber"
+
+subagents:
+  approved: false
+  note: >-
+    Componente único e fortemente acoplado. A mudança atravessa prefilter,
+    hybrid-classifier, os testes de ambos e o contrato de domínio. Paralelizar
+    criaria conflito em arquivos compartilhados sem ganho de tempo real.
+
+open_questions:
+  - id: OQ-3
+    question: "Rodar o corpus completo (11 artigos, ~US$ 0,40) para decidir a escala do score?"
+    owner: usuário
+    blocks: "ADR-007 e M3"
+    default: "Sim — sem isso a fórmula continua sem base empírica"

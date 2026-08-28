@@ -1,7 +1,13 @@
 # ADR-003 — A fórmula do CiteScore
 
 - **Data:** 2026-08-27
-- **Status:** aceita
+- **Status:** aceita · EMENDADA por [ADR-007](007-escala-do-score.md)
+
+> **Atualizacao de 2026-08-28:** a calibracao confirmou o que esta ADR previa
+> ao chamar os pesos de "ponto de partida, nao um resultado". Artigos de
+> perfis distintos pontuaram 17, 23 e 24 — amplitude de 7 pontos numa escala
+> de 0 a 100. A fórmula NAO foi alterada; a ADR-007 registra o diagnostico e o
+> plano de medicao obrigatorio antes de qualquer mudanca de peso.
 - **Contexto do change:** [001-analisador-densidade-factual](../changes/001-analisador-densidade-factual/)
 
 ## Contexto

@@ -1,7 +1,17 @@
 # ADR-005 — Modelo, forma de chamada e custo por análise
 
 - **Data:** 2026-08-27
-- **Status:** aceita, com [OQ-1](#oq-1--decisão-de-tier-em-aberto) em aberto
+- **Status:** aceita · OQ-1 RESPONDIDA (`claude-haiku-4-5`) · custo CORRIGIDO por medicao
+
+> **Atualizacao de 2026-08-28.** Tres correcoes vindas da execucao real:
+> **(1)** o custo projetado aqui estava errado por 7x — o real e ~US$ 0,05 por
+> artigo, nao US$ 0,007, porque a projecao assumia 50% de escalonamento (real:
+> 100%, ver [ADR-006](006-prefiltro-deixa-de-decidir.md)) e ~40 sentencas por
+> artigo (real: ate 149). **(2)** `output_config.effort` e thinking adaptativo
+> nao se aplicam: o modelo escolhido nao suporta `effort` e o SDK instalado nao
+> expoe nenhum dos dois. **(3)** prompt caching NAO funciona no haiku — prefixo
+> minimo de 4096 tokens contra uma rubrica de ~950. Confirmado por medicao:
+> `cache_read_input_tokens` = 0.
 - **Contexto do change:** [001-analisador-densidade-factual](../changes/001-analisador-densidade-factual/)
 
 ## Contexto

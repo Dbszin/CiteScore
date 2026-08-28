@@ -12,6 +12,23 @@ Checklist ordenado. A ordem é a de `design.md` § Estratégia de Implementaçã
 
 ---
 
+## ✅ RECONCILIAÇÃO PARCIAL (2026-08-28) — pelo Architect
+
+O Architect revisou o débito acumulado à luz da calibração. Resultado:
+
+- **Reconciliado por ADR nova:** o motor híbrido (ADR-002 superseded em parte
+  por [ADR-006](../../decisions/006-prefiltro-deixa-de-decidir.md)), a escala
+  do score (ADR-003 emendada por
+  [ADR-007](../../decisions/007-escala-do-score.md)) e o custo/superfície de
+  API (nota de atualização na ADR-005).
+- **Migrado para o change 002:** tudo que dependia do pré-filtro decisório —
+  incluindo o ramo "link externo + atribuição", que deixa de importar porque
+  não há mais decisão por regra.
+- **Ainda pendente aqui:** os itens de extração e de contrato listados abaixo,
+  que continuam válidos e não foram tocados pela calibração.
+
+Ver [002-motor-llm-puro](../002-motor-llm-puro/).
+
 ## ⚠️ DÉBITO DE SPEC — pendente de reconciliação pelo Architect
 
 O usuário optou por corrigir no código em vez de revisar a spec primeiro
@@ -178,6 +195,81 @@ escala de 0 a 100. Três camadas falharam; a correção cobre as três.
 - [ ] **`cacheIsEffective` ganhou consumidor:** o smoke mede a rubrica
       (~702 tokens medidos) e informa que ela fica abaixo do prefixo mínimo do
       modelo. Antes era método público sem uso.
+
+### 🔬 RESULTADO DA CALIBRAÇÃO (2026-08-28) — a premissa da ADR-002 não se sustenta
+
+Primeira execução do pipeline completo sobre corpus real: 11 artigos
+baixados, **2.149 sentenças analisáveis**, 3 artigos classificados pelo LLM
+antes de o guarda de custo abortar.
+
+**Achado central: o pré-filtro determinístico resolve 0,3% dos casos.**
+A ADR-002 estabelece meta de ≥50%. A medição diz que ele é praticamente
+inerte em conteúdo real.
+
+Frequência dos sinais em 2.149 sentenças:
+
+| Sinal | Ocorrências | % |
+|---|---|---|
+| `source_date` | 375 | 17,4% |
+| `hedge_vague_quantifier` | 121 | 5,6% |
+| `hedge_modal` | 52 | 2,4% |
+| `opinion_imperative` | 28 | 1,3% |
+| `source_quantity` | 27 | 1,3% |
+| `opinion_adjective` | 19 | 0,9% |
+| **`source_attribution`** | **9** | **0,4%** |
+| **`opinion_first_person`** | **0** | **0%** |
+
+Duas descobertas que invalidam pressupostos da ADR-002:
+
+- [ ] **A atribuição nomeada aparece em 0,4% das sentenças.** A regra de
+      `SOURCED` direto exige a CONJUNÇÃO de atribuição com quantidade ou data
+      na mesma sentença — combinação matematicamente quase impossível quando
+      um dos termos é tão raro. Em prosa real a atribuição está numa frase e
+      o número em outra.
+- [ ] **`opinion_first_person` NUNCA ocorreu** em 2.149 sentenças. O caso 2
+      da ADR-002 (OPINION decidido por regra) é código morto em conteúdo
+      profissional, que não escreve "eu acho".
+
+Variantes de regra medidas sobre o mesmo corpus:
+
+| Variante | Resolve | Observação |
+|---|---|---|
+| ATUAL: quantidade **E** atribuição | **0,3%** | praticamente inerte |
+| ALT-1: atribuição sozinha | 0,4% | não ajuda — a atribuição é que é rara |
+| ALT-2: atribuição **OU** quantidade/data | 19,6% | melhor, mas longe de 50% |
+
+- [ ] **Nem a variante mais permissiva alcança a meta.** E ALT-2 compraria
+      cobertura ao custo de falso positivo: `source_date` carrega quase toda
+      a diferença (17,4%), e data sozinha NÃO é fonte — "em 2024 a empresa
+      cresceu" tem data e nenhuma fonte. Seria exatamente o erro confiante
+      que a ADR-002 define como inaceitável.
+- [ ] **Decisão de arquitetura necessária:** aceitar que o motor é LLM puro e
+      simplificar, redesenhar os sinais, ou revisar a meta de 50%. Não é
+      decisão de implementação.
+
+**Números da execução:**
+
+| Métrica | Valor |
+|---|---|
+| Taxa de escalonamento | **100%** em todos os artigos (meta: ≤50%) |
+| Custo médio por artigo | **US$ 0,0499** (projeção da ADR-005: US$ 0,007) |
+| Pior artigo | US$ 0,1050 — 15x a estimativa, disparou o guarda |
+| Custo total gasto | US$ 0,1497 de US$ 0,50 autorizados |
+| `cache_read` | 0 tokens, como previsto para o haiku |
+| Scores obtidos | 17, 23, 24 — amplitude de apenas 7 pontos |
+
+- [ ] **A projeção de custo da ADR-005 estava errada por 7x**, e a causa é
+      direta: ela assumia 50% de escalonamento e ~40 sentenças por artigo.
+      O real é 100% e até 149 sentenças analisáveis.
+- [ ] **Sinal de alerta de produto:** conteúdo SEO de referência (Moz,
+      Ahrefs) pontuou 23 e 24 numa escala de 0 a 100. Se páginas pilares do
+      próprio nicho tiram nota baixa, ou a escala está mal calibrada ou o
+      produto vai dizer a todo mundo que seu conteúdo é ruim. Os pesos
+      0,6/0,4 da ADR-003 precisam ser revisitados com esse dado.
+
+**Entregáveis:** `scripts/calibrate.ts`, `scripts/calibration/` (urls, fetch,
+índice), CSV com 331 sentenças classificadas para conferência manual em
+`scripts/calibration/output/`.
 
 ### ⛔ Bloqueador de M4 — não resolver antes do deploy é irresponsável
 

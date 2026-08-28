@@ -1,7 +1,15 @@
 # ADR-002 — Motor híbrido: pré-filtro determinístico + LLM nos casos ambíguos
 
 - **Data:** 2026-08-27
-- **Status:** aceita
+- **Status:** SUPERSEDIDA EM PARTE por [ADR-006](006-prefiltro-deixa-de-decidir.md)
+
+> **Atualizacao de 2026-08-28:** a calibracao sobre 2.149 sentencas reais mediu
+> que o pre-filtro resolve **0,3%** dos casos, contra a meta de 50% registrada
+> aqui. A premissa de que uma fracao significativa das sentencas e
+> "obviamente" classificavel por regra nao se sustenta em prosa real. O
+> pre-filtro deixou de decidir e passou a anotar sinais. As tabelas de sinais
+> e o criterio de escalonamento descritos abaixo permanecem validos como
+> DOCUMENTACAO dos sinais; a parte decisoria foi superada.
 - **Contexto do change:** [001-analisador-densidade-factual](../changes/001-analisador-densidade-factual/)
 
 ## Contexto
