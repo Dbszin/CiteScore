@@ -89,6 +89,96 @@ Reviewer. Também ainda não refletidas nas ADRs:
       clone limpo rodava 136 testes e reportava verde; agora roda 282, e em
       CI a ausência é erro visível.
 
+### Rodada do classificador LLM (2026-08-28)
+
+A **ADR-005 precisa de reconciliação**: ela especificou parâmetros de API que
+não se aplicam à configuração real. Três descobertas, todas verificadas em
+execução:
+
+- [ ] **`output_config.effort: "low"` não é enviado.** Dois motivos
+      independentes: `effort` retorna erro em `claude-haiku-4-5` (o tier
+      escolhido em OQ-1), **e** o SDK instalado (`@anthropic-ai/sdk` 0.70.1)
+      não expõe `effort` de forma alguma. A ADR assumia `claude-opus-5` e um
+      SDK mais recente.
+- [ ] **Thinking adaptativo não é enviado.** O SDK 0.70.1 só oferece
+      `enabled`/`disabled`, sem `adaptive`. Para classificação em lote, sem
+      thinking é o desejável — mais barato e mais rápido.
+- [ ] **Structured output vive em `client.beta.messages.parse` com o
+      parâmetro `output_format`**, não em `client.messages.parse` com
+      `output_config.format`.
+- [ ] **O helper `betaZodOutputFormat` do SDK é inutilizável aqui:** chama
+      `z.toJSONSchema()`, que só existe no Zod 4, e o projeto usa Zod 3.25.x.
+      O JSON Schema vai explícito em `schemas.ts`, com teste garantindo que
+      não divirja do schema Zod que valida a resposta.
+- [ ] **A API rejeita `minimum`/`maximum` em campo `number` do JSON Schema**
+      (400: "properties maximum, minimum are not supported"). Descoberto na
+      verificação real — o teste com stub não pegaria, porque stub não valida
+      o schema enviado. A faixa 0..1 de `confidence` continua garantida pelo
+      Zod na resposta.
+- [ ] **Prompt caching NÃO funciona com `claude-haiku-4-5`.** O prefixo
+      mínimo cacheável é de 4096 tokens nesse modelo — o maior da tabela,
+      contra 512 no `claude-opus-5` — e a rubrica tem ~950 tokens. Confirmado
+      na verificação real: `cache_creation_input_tokens: 0`. O
+      `cache_control` continua sendo enviado porque passa a valer sozinho se
+      o tier subir; inflar a rubrica para cruzar 4096 seria pagar mais
+      entrada para economizar entrada.
+- [ ] **`model-capabilities.ts` é novo** e documenta as diferenças de
+      superfície entre modelos, com default conservador para modelo
+      desconhecido. Não está em nenhuma ADR.
+- [ ] **`HybridClassifier.escalationRate()` é novo:** mede a taxa de
+      escalonamento da ADR-002 sem gastar nada, porque o pré-filtro é
+      determinístico. É o que torna a calibração de M2 viável antes de
+      qualquer chamada paga.
+- [ ] **Custo real medido está MUITO abaixo da estimativa da ADR-005.**
+      Verificação de 4 sentenças com `claude-haiku-4-5` (3 escaladas ao LLM):
+      1.018 tokens de entrada, 75 de saída, **US$ 0,001393**, 2,4s.
+      Extrapolando para artigo típico (80 sentenças analisáveis, 50%
+      escalando): entrada ~1.950, saída ~1.000, **≈ US$ 0,007 por análise**.
+      A ADR-005 projetava US$ 0,026 para o haiku — o real é ~3,7x menor,
+      porque a projeção incluía thinking (que o haiku não tem), justificativa
+      por sentença (removida) e a chamada de sugestões (ainda não
+      implementada). Número medido, não estimado.
+
+### Correção do score fora da escala (2026-08-28)
+
+Achado crítico da terceira revisão, comprovado por execução: id duplicado na
+resposta do modelo produzia **densidade factual de 150% e score 130** numa
+escala de 0 a 100. Três camadas falharam; a correção cobre as três.
+
+- [ ] ⚠️ **MUDANÇA DE CONTRATO — precisa de reconciliação pelo Architect:**
+      `UnscoredReason` ganhou o valor **`INCONSISTENT_INPUT`**. A ADR-003
+      define apenas `INSUFFICIENT_CONTENT` e `NO_CLAIMS_FOUND`. O novo estado
+      existe porque a aritmética do score pressupõe no máximo uma
+      classificação por sentença analisável, e o pipeline podia violar isso.
+      Sem um estado próprio, a alternativa seria emitir score sem sentido ou
+      lançar de dentro de uma função pura.
+- [ ] **Invariante em `computeScore`:** se
+      `sourced + unsourced + opinion > analyzableCount`, não emite score.
+      Fica na função pura de propósito — é a única barreira que protege
+      independentemente de qual camada acima erre. Menos classificações que
+      `N` continua aceito; mais, nunca.
+- [ ] **Dedup no `ClaudeClassifier`:** `Set` de índices já vistos, mantendo a
+      primeira ocorrência. Antes só validava se o índice pertencia ao lote,
+      não se já havia aparecido.
+- [ ] **`renderBatch` passou a numerar com índices LOCAIS `0..N-1`** por
+      lote, com tradução de volta ao id de domínio pela posição. A versão
+      anterior usava o id global do documento (podia ser 380, esparso), o que
+      aumentava a chance de o modelo errar o eco — a causa raiz. Trata a
+      origem, não só o sintoma.
+- [ ] **`toDomainError` foi simplificada de 24 linhas para 1.** Tinha sete
+      ramos `instanceof` que produziam todos o mesmo código, sob um comentário
+      afirmando preservar a distinção entre falha retentável e não retentável.
+      O código não preservava. **Pendência para o Architect:** decidir se o
+      produto precisa de um código de erro retentável — hoje não há consumidor
+      que decida retry a partir dessa informação.
+- [ ] **`max_tokens` passou a ser derivado** de `maxSentencesPerCall`
+      (`deriveMaxTokens`), em vez de fixo em 8.000. Com o lote em 400 a saída
+      precisaria de ~16.500 tokens e seria truncada, gerando
+      `CLASSIFIER_INVALID_OUTPUT` que aponta para a causa errada.
+- [ ] **`cacheIsEffective` ganhou consumidor:** o smoke mede a rubrica
+      (~702 tokens medidos) e informa que ela fica abaixo do prefixo mínimo do
+      modelo. Antes era método público sem uso.
+
 ### ⛔ Bloqueador de M4 — não resolver antes do deploy é irresponsável
 
 - [ ] **TOCTOU / DNS rebinding no `HttpContentFetcher`.** `assertPublicHost`
@@ -168,18 +258,18 @@ Split registrado em `.spec.yaml` § `subagents`.
 - [x] **Teste-invariante: nenhuma sentença recebe `UNSOURCED` com `decidedBy: 'rules'`**
 
 **Componente D — classificador LLM**
-- [ ] `src/adapters/classify/schemas.ts` — Zod, **sem** campo de justificativa por sentença
-- [ ] `src/adapters/classify/prompts/classify-system.ts` — prefixo estável e cacheável
-- [ ] `src/adapters/classify/claude-classifier.ts` — `messages.parse()` + `zodOutputFormat`, `effort: "low"`, `cache_control` no `system`, `betas: ["server-side-fallback-2026-07-01"]` + `fallbacks: "default"`
-- [ ] Guarda de `stop_reason === 'refusal'` **antes** de ler `content`
-- [ ] Guarda de `parsed_output === null`
-- [ ] Particionamento por `MAX_SENTENCES_PER_LLM_CALL`
-- [ ] Cadeia de tratamento de erro do SDK, do mais específico ao mais genérico
-- [ ] Extração de `usage` para `ClassifierUsage`
+- [x] `src/adapters/classify/schemas.ts` — Zod, **sem** campo de justificativa por sentença
+- [x] `src/adapters/classify/prompts/classify-system.ts` — prefixo estável e cacheável
+- [x] `src/adapters/classify/claude-classifier.ts` — `messages.parse()` + `zodOutputFormat`, `effort: "low"`, `cache_control` no `system`, `betas: ["server-side-fallback-2026-07-01"]` + `fallbacks: "default"`
+- [x] Guarda de `stop_reason === 'refusal'` **antes** de ler `content`
+- [x] Guarda de `parsed_output === null`
+- [x] Particionamento por `MAX_SENTENCES_PER_LLM_CALL`
+- [x] Cadeia de tratamento de erro do SDK, do mais específico ao mais genérico
+- [x] Extração de `usage` para `ClassifierUsage`
 
 ### Sequencial (depois de A–D)
 
-- [ ] `src/adapters/classify/hybrid-classifier.ts` — composição
+- [x] `src/adapters/classify/hybrid-classifier.ts` — composição
 - [x] `src/core/scoring/weights.ts`
 - [x] `src/core/scoring/compute-score.ts` — função pura
 - [x] `tests/core/scoring/compute-score.test.ts` — tabela cobrindo os 3 casos de borda

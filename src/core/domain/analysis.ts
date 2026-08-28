@@ -20,8 +20,18 @@ export interface ScoreBreakdown {
 /**
  * ADR-003: ausência de score é estado de primeira classe, não `score: 0`.
  * Zero é uma medida; ausência de medida é outra coisa.
+ *
+ * `INCONSISTENT_INPUT` é acréscimo posterior à ADR-003 e precisa de
+ * reconciliação pelo Architect (registrado no débito de spec). Ele existe
+ * porque a aritmética do score pressupõe que cada sentença analisável tenha
+ * no máximo uma classificação — pressuposto que o pipeline pode violar se o
+ * modelo repetir um id. Sem esse estado, a violação produzia densidade de
+ * 150% e score 130 numa escala de 0 a 100.
  */
-export type UnscoredReason = 'INSUFFICIENT_CONTENT' | 'NO_CLAIMS_FOUND';
+export type UnscoredReason =
+  | 'INSUFFICIENT_CONTENT'
+  | 'NO_CLAIMS_FOUND'
+  | 'INCONSISTENT_INPUT';
 
 export type ScoreOutcome =
   | { readonly kind: 'scored'; readonly score: number }

@@ -56,6 +56,27 @@ export function computeScore(
     llmEscalationRate,
   };
 
+  // ==== ÚLTIMA BARREIRA DE CONSISTÊNCIA ====
+  //
+  // Toda a aritmética abaixo pressupõe que cada sentença analisável tenha no
+  // máximo UMA classificação. Se o pipeline entregar mais — e ele entrega,
+  // quando o modelo repete um id na resposta —, o pressuposto quebra e o
+  // resultado deixa de ter significado: densidade factual de 150% e score
+  // 130 numa escala de 0 a 100 foram medidos antes desta guarda existir.
+  //
+  // A checagem fica aqui, e não só na origem, de propósito: esta função é a
+  // única que protege independentemente de qual camada acima tenha errado.
+  // Preferimos recusar a medida a publicar um número sem sentido.
+  //
+  // Menos classificações que N é aceitável: o pipeline pode legitimamente
+  // entregar menos. Mais, nunca.
+  if (sourced + unsourced + opinion > analyzableCount) {
+    return {
+      outcome: { kind: 'unscored', reason: 'INCONSISTENT_INPUT' },
+      breakdown,
+    };
+  }
+
   // Texto curto: não há medida a dar. Não é score zero — é ausência de score.
   if (analyzableCount < MIN_ANALYZABLE_SENTENCES) {
     return {

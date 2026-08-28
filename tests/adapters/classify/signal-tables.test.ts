@@ -208,25 +208,92 @@ describe('Tabela EN', () => {
 });
 
 describe('Cobertura da bateria', () => {
-  it('todo sinal declarado nas tabelas aparece em pelo menos um caso', () => {
-    // Impede que um sinal novo entre sem teste — foi assim que os três bugs
-    // anteriores conseguiram existir.
-    const cobertosPt = new Set<SignalKind>([
+  /**
+   * A versão anterior deste guarda era INERTE, e o Reviewer provou por
+   * injeção: ela comparava o conjunto de `kind` da tabela contra uma lista
+   * fixa. Como `SignalKind` é união fechada e todos os valores já estavam
+   * classificados, nenhum kind novo podia aparecer — e adicionar um SINAL
+   * com kind existente passava livre.
+   *
+   * O problema real é sinal novo sem teste, e os três bugs anteriores foram
+   * todos em sinais existentes. Então o guarda passa a exigir cobertura por
+   * NOME de sinal, que é a granularidade em que os bugs acontecem.
+   */
+  const COBERTOS_PT = new Set<string>([
+    'quantidade_com_unidade',
+    'valor_monetario',
+    'ano_ou_data',
+    'atribuicao_nomeada',
+    'segundo_ordinal_nao_atribuicao',
+    'primeira_pessoa_avaliativa',
+    'recomendacao_imperativa',
+    'modal_incerto',
+    'quantificador_vago',
+    'falsa_autoridade',
+  ]);
+
+  /** Sinais reconhecidamente sem bateria dedicada. A lista não deve crescer. */
+  const PENDENTES_PT = new Set<string>(['citacao_atribuida', 'adjetivo_avaliativo']);
+
+  it('todo sinal PT-BR tem bateria OU está na lista explícita de pendentes', () => {
+    const semCobertura = PT_BR_SIGNALS.signals
+      .map((signal) => signal.name)
+      .filter((name) => !COBERTOS_PT.has(name) && !PENDENTES_PT.has(name));
+
+    expect(
+      semCobertura,
+      `Sinal(is) sem caso de teste: ${semCobertura.join(', ')}. ` +
+        'Acrescente casos positivos e negativos na bateria acima, ou ' +
+        'declare a pendência em PENDENTES_PT com justificativa.',
+    ).toEqual([]);
+  });
+
+  it('a lista de pendentes não cresceu', () => {
+    // Trava o débito no tamanho atual: adicionar sinal sem teste exige
+    // editar esta contagem, o que aparece em code review.
+    expect(PENDENTES_PT.size).toBe(2);
+  });
+
+  it('nenhum sinal declarado duas vezes com o mesmo nome', () => {
+    for (const table of [PT_BR_SIGNALS, EN_SIGNALS]) {
+      const nomes = table.signals.map((signal) => signal.name);
+      expect(new Set(nomes).size, `nomes duplicados em ${table.language}`).toBe(
+        nomes.length,
+      );
+    }
+  });
+
+  it('todo sinal tem padrão que compila e não casa string vazia', () => {
+    // Um padrão que casa tudo passaria silenciosamente por qualquer bateria.
+    for (const table of [PT_BR_SIGNALS, EN_SIGNALS]) {
+      for (const signal of table.signals) {
+        expect(signal.pattern.test(''), `${signal.name} casa string vazia`).toBe(
+          false,
+        );
+      }
+    }
+  });
+
+  it('o kind de cada sinal é um dos valores conhecidos', () => {
+    const conhecidos = new Set<SignalKind>([
       'source_quantity',
       'source_date',
       'source_attribution',
-      'attribution_disqualifier',
-      'hedge_false_authority',
-      'hedge_vague_quantifier',
-      'hedge_modal',
+      'source_quote',
       'opinion_first_person',
       'opinion_imperative',
+      'opinion_adjective',
+      'hedge_modal',
+      'hedge_vague_quantifier',
+      'hedge_false_authority',
+      'attribution_disqualifier',
     ]);
-    const naTabela = new Set(PT_BR_SIGNALS.signals.map((s) => s.kind));
-    const semCobertura = [...naTabela].filter((k) => !cobertosPt.has(k));
-
-    // `source_quote` e `opinion_adjective` são os únicos ainda sem bateria
-    // dedicada; registrados aqui para que a lista não cresça em silêncio.
-    expect(semCobertura.sort()).toEqual(['opinion_adjective', 'source_quote']);
+    for (const table of [PT_BR_SIGNALS, EN_SIGNALS]) {
+      for (const signal of table.signals) {
+        expect(conhecidos.has(signal.kind), `${signal.name}: ${signal.kind}`).toBe(
+          true,
+        );
+      }
+    }
   });
 });

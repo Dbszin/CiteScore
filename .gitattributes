@@ -1,0 +1,10 @@
+# Normalizacao de fim de linha: texto por padrao, decidido pelo git.
+* text=auto
+
+# Fixture gravado em cp1252 (windows-1252) de proposito, para o teste de
+# charset. Depende de fidelidade byte a byte: qualquer normalizacao de fim de
+# linha ou reencode altera o arquivo que o teste le. Marcado como binario.
+tests/fixtures/html-min/pt-latin1.html binary
+
+# HTMLs crus do benchmark tambem sao dados capturados, nao codigo.
+scripts/benchmarks/extraction/data/raw/*.html binary
