@@ -25,3 +25,6 @@ Thumbs.db
 # Os HTMLs crus (~4 MB) e o node_modules local, nao.
 scripts/benchmarks/**/node_modules/
 scripts/benchmarks/extraction/data/raw/*.html
+
+# Corpus de calibracao: HTMLs crus nao versionados; o indice sim.
+scripts/calibration/data/*.html

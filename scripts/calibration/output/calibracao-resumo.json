@@ -1,0 +1,58 @@
+{
+  "model": "claude-haiku-4-5",
+  "scoreVersion": "1.0.0",
+  "custoTotal": 0.14965,
+  "linhas": [
+    {
+      "id": "en-seo-ahrefs",
+      "tipo": "MIX",
+      "lang": "en",
+      "palavras": 2638,
+      "sentencas": 255,
+      "analisaveis": 149,
+      "escalados": 149,
+      "taxa": 1,
+      "sourced": 26,
+      "unsourced": 60,
+      "opinion": 63,
+      "score": "23",
+      "custo": 0.019925,
+      "cacheRead": 0,
+      "erro": null
+    },
+    {
+      "id": "en-seo-moz",
+      "tipo": "A-dominante",
+      "lang": "en",
+      "palavras": 1910,
+      "sentencas": 175,
+      "analisaveis": 100,
+      "escalados": 100,
+      "taxa": 1,
+      "sourced": 19,
+      "unsourced": 40,
+      "opinion": 41,
+      "score": "24",
+      "custo": 0.013319,
+      "cacheRead": 0,
+      "erro": null
+    },
+    {
+      "id": "en-tech-mdn",
+      "tipo": "B-dominante",
+      "lang": "en",
+      "palavras": 1554,
+      "sentencas": 120,
+      "analisaveis": 82,
+      "escalados": 82,
+      "taxa": 1,
+      "sourced": 13,
+      "unsourced": 58,
+      "opinion": 11,
+      "score": "17",
+      "custo": 0.011384,
+      "cacheRead": 0,
+      "erro": null
+    }
+  ]
+}
