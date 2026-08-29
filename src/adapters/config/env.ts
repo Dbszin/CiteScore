@@ -9,6 +9,9 @@ import { z } from 'zod';
 const intFromEnv = (fallback: number) =>
   z.coerce.number().int().positive().default(fallback);
 
+const dollarsFromEnv = (fallback: number) =>
+  z.coerce.number().positive().default(fallback);
+
 const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY é obrigatória'),
 
@@ -24,9 +27,33 @@ const EnvSchema = z.object({
   MAX_ANALYZABLE_SENTENCES: intFromEnv(400),
   MAX_SENTENCES_PER_LLM_CALL: intFromEnv(80),
 
-  /** Defesa 3 — budget guard. */
-  DAILY_TOKEN_BUDGET: intFromEnv(2_000_000),
-  MAX_TOKENS_PER_REQUEST: intFromEnv(40_000),
+  /**
+   * Defesa 3 — budget guard, denominado em DÓLARES.
+   *
+   * A versão anterior contava tokens de ENTRADA (`DAILY_TOKEN_BUDGET`), e isso
+   * media a coisa errada: no `claude-haiku-4-5` a entrada custa US$1/MTok e a
+   * saída US$5/MTok. Na análise real medida — 4.244 de entrada, 2.261 de saída
+   * — a SAÍDA respondeu por 73% do custo. Um teto sobre a entrada limita a
+   * parte barata do gasto.
+   *
+   * Pior: 2.000.000 tokens de entrada valem US$2,00, contra o teto de US$1,00
+   * aprovado. O parâmetro contradizia a decisão.
+   */
+  DAILY_BUDGET_USD: dollarsFromEnv(1.0),
+  MAX_REQUEST_BUDGET_USD: dollarsFromEnv(0.1),
+
+  /** Preços do modelo, explícitos em vez de embutidos no código. */
+  MODEL_INPUT_USD_PER_MTOK: dollarsFromEnv(1.0),
+  MODEL_OUTPUT_USD_PER_MTOK: dollarsFromEnv(5.0),
+
+  /**
+   * Saída estimada como fração da entrada, para o pré-flight.
+   *
+   * MEDIDO: 2.261/4.244 = 0,53. O default carrega margem porque subestimar
+   * aqui é exatamente a falha que o guard existe para prevenir — errar para
+   * cima recusa análise que caberia; errar para baixo fura o teto.
+   */
+  BUDGET_OUTPUT_RATIO: z.coerce.number().positive().default(0.7),
 
   /** Defesa 1 — rate limit. */
   RATE_LIMIT_PER_HOUR: intFromEnv(10),

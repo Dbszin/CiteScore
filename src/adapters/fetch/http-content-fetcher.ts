@@ -1,4 +1,4 @@
-import dns from 'node:dns/promises';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 import { analysisError } from '../../core/domain/errors.js';
 import type {
@@ -7,6 +7,14 @@ import type {
 } from '../../core/ports/content-fetcher.js';
 import { decodeHtml } from './charset.js';
 import { isBlockedAddress, isBlockedHostname } from './private-address.js';
+import {
+  createValidatingLookup,
+  findBlockedAddressError,
+  systemResolver,
+} from './validating-lookup.js';
+import type { AddressResolver } from './validating-lookup.js';
+
+export type { AddressResolver } from './validating-lookup.js';
 
 export interface HttpFetcherOptions {
   readonly maxBytes: number;
@@ -18,20 +26,46 @@ export interface HttpFetcherOptions {
 const DEFAULT_USER_AGENT =
   'CiteScoreBot/0.1 (+https://github.com/Dbszin/CiteScore)';
 
-/** Resolvedor de DNS injetável, para que os testes de SSRF não usem rede. */
-export type AddressResolver = (hostname: string) => Promise<string[]>;
+/**
+ * Transporte com o endereço pinado (ADR-008).
+ *
+ * Usa o `fetch` do undici, e não o global, por um motivo concreto: o
+ * `dispatcher` só tem efeito quando o `Agent` vem da MESMA instância da
+ * biblioteca. O Node 20 embute o undici mas não o expõe como módulo
+ * importável, então um `Agent` de um pacote instalado à parte seria ignorado
+ * em silêncio pelo `fetch` global — e "ignorado em silêncio" é exatamente o
+ * modo de falha que esta mudança existe para eliminar.
+ *
+ * Verificado em execução: o undici consulta o lookup com `{ all: true }`, e a
+ * conexão HTTPS para o nome mantém SNI e validação de certificado.
+ */
+function createPinnedFetch(resolve: AddressResolver): typeof fetch {
+  const agent = new Agent({
+    connect: {
+      lookup: createValidatingLookup({ resolve }) as never,
+    },
+  });
 
-const systemResolver: AddressResolver = async (hostname) => {
-  const records = await dns.lookup(hostname, { all: true });
-  return records.map((record) => record.address);
-};
+  return ((input: RequestInfo | URL, init?: RequestInit) =>
+    undiciFetch(String(input), {
+      ...(init as Record<string, unknown>),
+      dispatcher: agent,
+    } as never)) as unknown as typeof fetch;
+}
 
 export class HttpContentFetcher implements ContentFetcher {
+  private readonly fetchImpl: typeof fetch;
+
   constructor(
     private readonly options: HttpFetcherOptions,
     private readonly resolveAddresses: AddressResolver = systemResolver,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    fetchImpl?: typeof fetch,
+  ) {
+    // Sem transporte injetado, o padrão é o pinado. Teste que injeta um
+    // transporte falso NÃO passa pelo lookup — por isso a pré-checagem
+    // abaixo continua existindo.
+    this.fetchImpl = fetchImpl ?? createPinnedFetch(this.resolveAddresses);
+  }
 
   async fetch(url: string): Promise<FetchedPage> {
     let current = this.parseAndValidate(url);
@@ -83,6 +117,25 @@ export class HttpContentFetcher implements ContentFetcher {
     return parsed;
   }
 
+  /**
+   * Pré-checagem, mantida DE PROPÓSITO mesmo com a validação no caminho de
+   * conexão (ADR-008).
+   *
+   * A ADR previa remover este método, e a segurança de fato não depende mais
+   * dele: quem fecha a janela de TOCTOU é o lookup validador. Ele fica por
+   * duas razões práticas.
+   *
+   * A primeira é de teste: os 21 casos existentes injetam um `fetch` falso,
+   * que nunca passa pelo transporte real e portanto nunca aciona o lookup.
+   * Removê-lo faria toda a bateria de SSRF continuar verde sem exercitar
+   * bloqueio nenhum — o modo de falha "suíte reporta verde sem ter validado
+   * nada" que este projeto já sofreu uma vez.
+   *
+   * A segunda é de custo: rejeitar antes de abrir socket é mais barato e
+   * produz erro mais preciso que desembrulhar falha de conexão.
+   *
+   * Redundância deliberada, não esquecimento. Registrada como desvio da spec.
+   */
   private async assertPublicHost(target: URL): Promise<void> {
     let addresses: string[];
     try {
@@ -120,6 +173,13 @@ export class HttpContentFetcher implements ContentFetcher {
       });
     } catch (cause) {
       if (controller.signal.aborted) throw analysisError('FETCH_TIMEOUT', cause);
+      // A recusa do lookup chega embrulhada em camadas de erro de socket. Sem
+      // desembrulhar, um bloqueio de SSRF viraria FETCH_FAILED — o usuário
+      // leria "não foi possível acessar a página" no lugar da razão real, e o
+      // log não distinguiria ataque de site fora do ar.
+      if (findBlockedAddressError(cause) !== null) {
+        throw analysisError('BLOCKED_HOST', cause);
+      }
       throw analysisError('FETCH_FAILED', cause);
     } finally {
       clearTimeout(timer);

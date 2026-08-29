@@ -30,7 +30,9 @@ export type AnalysisErrorCode =
   | 'CLASSIFIER_INVALID_OUTPUT'
   // guardas de custo
   | 'RATE_LIMITED'
-  | 'BUDGET_EXCEEDED';
+  | 'BUDGET_EXCEEDED'
+  | 'REQUEST_TOO_EXPENSIVE'
+  | 'GUARD_UNAVAILABLE';
 
 export class AnalysisError extends Error {
   constructor(
@@ -87,8 +89,17 @@ export const USER_MESSAGES: Record<AnalysisErrorCode, string> = {
   CLASSIFIER_INVALID_OUTPUT:
     'Falha ao processar o resultado da análise. Tente novamente.',
   RATE_LIMITED: 'Muitas análises em pouco tempo. Aguarde um instante.',
+  // Teto DIÁRIO, global e compartilhado por todos os visitantes. Não há o que
+  // o usuário faça hoje além de voltar amanhã.
   BUDGET_EXCEEDED:
     'O limite diário de análises foi atingido. Tente novamente amanhã.',
+  // Esta análise ESPECÍFICA é cara demais. Diferente do teto diário, tem
+  // saída: trocar de artigo. Colapsar as duas numa mensagem só transformaria
+  // um problema resolvível num beco aparente.
+  REQUEST_TOO_EXPENSIVE:
+    'Este artigo é grande demais para o limite de análise. Tente um texto mais curto.',
+  GUARD_UNAVAILABLE:
+    'O serviço está temporariamente indisponível. Tente novamente em instantes.',
 };
 
 export function analysisError(

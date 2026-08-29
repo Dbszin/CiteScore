@@ -90,9 +90,27 @@ describe('Mapa de status HTTP', () => {
     }
   });
 
-  it('as guardas de custo respondem 429', () => {
+  it('429 fica só onde o limite É do cliente', () => {
+    // O rate limit é por IP: dizer "você fez requisições demais" é verdade.
     expect(HTTP_STATUS.RATE_LIMITED).toBe(429);
-    expect(HTTP_STATUS.BUDGET_EXCEEDED).toBe(429);
+  });
+
+  it('o teto diário responde 503, não 429', () => {
+    // O teto é GLOBAL, consumido por todos os visitantes somados. Responder
+    // 429 a quem fez uma única requisição afirma algo falso sobre o
+    // comportamento dele; 503 descreve o que de fato ocorre.
+    expect(HTTP_STATUS.BUDGET_EXCEEDED).toBe(503);
+    expect(HTTP_STATUS.GUARD_UNAVAILABLE).toBe(503);
+  });
+
+  it('a recusa ACIONÁVEL tem status próprio', () => {
+    // "Este artigo é grande demais" tem saída — trocar de artigo. Colapsar
+    // isso no mesmo código do teto diário transformaria um problema
+    // resolvível num beco aparente.
+    expect(HTTP_STATUS.REQUEST_TOO_EXPENSIVE).toBe(413);
+    expect(HTTP_STATUS.REQUEST_TOO_EXPENSIVE).not.toBe(
+      HTTP_STATUS.BUDGET_EXCEEDED,
+    );
   });
 
   it('erro de entrada é 4xx e falha de provedor é 5xx', () => {

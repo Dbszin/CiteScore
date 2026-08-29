@@ -34,6 +34,18 @@ export const HTTP_STATUS: Record<AnalysisErrorCode, number> = {
   CLASSIFIER_INVALID_OUTPUT: 502,
 
   // Guardas de custo.
+  //
+  // 429 fica onde é verdadeiro: RATE_LIMITED É por cliente.
+  //
+  // BUDGET_EXCEEDED passa a 503 porque o teto diário é GLOBAL — consumido por
+  // todos os visitantes somados. Responder 429 ('você fez requisições demais')
+  // a quem fez uma única requisição afirma algo falso sobre o comportamento
+  // dele. 503 descreve o que de fato ocorre: o serviço está sem orçamento.
   RATE_LIMITED: 429,
-  BUDGET_EXCEEDED: 429,
+  BUDGET_EXCEEDED: 503,
+  // 413 porque o problema é o tamanho DESTA requisição, e é acionável.
+  REQUEST_TOO_EXPENSIVE: 413,
+  // A guarda não conseguiu decidir. 'Não sei' e 'decidi que não' são coisas
+  // diferentes, e a diferença aparece no log de quem for investigar.
+  GUARD_UNAVAILABLE: 503,
 };

@@ -46,7 +46,7 @@ describe('loadEnv', () => {
 
   it('LANÇA quando um cap é zero ou negativo', () => {
     expect(() => loadEnv({ ...valido, RATE_LIMIT_PER_HOUR: '0' })).toThrow();
-    expect(() => loadEnv({ ...valido, DAILY_TOKEN_BUDGET: '-1' })).toThrow();
+    expect(() => loadEnv({ ...valido, MAX_ANALYZABLE_SENTENCES: '-1' })).toThrow();
   });
 
   it('converte strings numéricas em números', () => {
