@@ -67,7 +67,7 @@ nenhuma delas pode ler como aprovação ou reprovação.
 | `--bg-sunken` | `hsl(40 18% 94%)` | `hsl(222 18% 9%)` | Ficha técnica, áreas recuadas |
 | `--text-primary` | `hsl(222 20% 14%)` | `hsl(40 18% 92%)` | Títulos e o texto analisado |
 | `--text-secondary` | `hsl(222 12% 36%)` | `hsl(40 10% 68%)` | Apoio, rótulos |
-| `--text-muted` | `hsl(222 9% 52%)` | `hsl(40 8% 52%)` | Meta, sentenças fora da análise |
+| `--text-muted` | `hsl(222 9% 44%)` | `hsl(40 8% 53%)` | Meta, sentenças fora da análise |
 | `--accent` | `hsl(224 58% 42%)` | `hsl(224 70% 68%)` | Ação primária, links, foco |
 | `--accent-contrast` | `hsl(42 30% 99%)` | `hsl(222 20% 12%)` | Texto sobre `--accent` |
 | `--border` | `hsl(38 16% 85%)` | `hsl(222 12% 26%)` | Divisores, contornos |
@@ -88,8 +88,20 @@ proíbe. São três lápis de revisor, de pesos iguais.
 | Sem fonte | `hsl(250 46% 46%)` | `hsl(250 68% 74%)` | `hsl(250 42% 94%)` | `hsl(250 34% 22%)` |
 | Opinião | `hsl(32 66% 34%)` | `hsl(32 72% 62%)` | `hsl(32 52% 92%)` | `hsl(32 42% 19%)` |
 
-**Contraste verificado** (tinta sobre o fundo da própria categoria, modo claro):
-teal 7,1:1 · índigo 6,4:1 · ocre 6,8:1. Todos acima de 4,5:1 para corpo.
+**Contraste CALCULADO** (tinta sobre o fundo da própria categoria, modo claro):
+teal **5,97:1** · índigo **6,60:1** · ocre **4,86:1**. Todos acima de 4,5:1
+para corpo.
+
+> Correção de 2026-08-29: esta linha afirmava 7,1 / 6,4 / 6,8, números que
+> nunca foram calculados — o ocre estava 28% acima do real e é o mais próximo
+> do limiar. O cálculo agora é um teste (`tests/adapters/ui/contraste.test.ts`),
+> que lê os tokens do CSS e recalcula. Ele achou de imediato duas reprovações
+> que a conferência manual não viu: `--text-muted` a 3,49:1 sobre a ficha
+> técnica no tema claro, e a 4,40:1 sobre o manuscrito no escuro. Ambas
+> corrigidas.
+>
+> A lição é a mesma da emenda da ADR-007: contraste escrito à mão é opinião;
+> o cálculo é determinístico e barato, e não havia razão para não fazê-lo.
 
 ### Cor nunca é o único canal
 
@@ -455,7 +467,9 @@ em 32/180/192/512px.
 - [x] Cores em HSL derivadas para o projeto; sem valores de exemplo
 - [x] Tipografia com tamanhos, pesos e entrelinhas exatos
 - [x] Tokens de espaço, raio e elevação definidos
-- [x] Contraste verificado (corpo ≥4,5:1, categorias ≥3:1)
+- [x] Contraste CALCULADO por `tests/adapters/ui/contraste.test.ts` — 20 pares
+      (10 × 2 temas), todos ≥4,5:1. Não é conferência manual: o teste lê os
+      tokens do CSS e reprova o build se alguém mexer numa cor e esquecer.
 - [x] Alvos de toque ≥44px, com a exceção justificada
 - [x] Foco desenhado para todos os interativos
 - [x] Carregando, vazio, erro, esqueleto, `unscored` e offline especificados

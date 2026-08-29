@@ -2,32 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Analysis } from '../core/domain/analysis.js';
-import type { ScorePanel, Segment } from './report-model.js';
+import type { LegendEntry, ScorePanel, Segment } from './report-model.js';
 import {
   buildLegend,
+  buildRecord,
   buildScorePanel,
   buildSegments,
 } from './report-model.js';
 
 /**
- * Tela mínima e funcional. NÃO é o M3 — não há design system nem polimento
- * visual, e a apresentação do score vai mudar quando a ADR-007 tiver base
- * empírica.
+ * A tela, conforme `specs/.../ui-relatorio/design-visual.md`.
  *
- * O que já vale aqui são os requisitos de CONTRATO da ADR-004, que não
- * dependem de decisão visual: o número nunca aparece sem o breakdown, a
- * ressalva de metodologia fica acima da dobra, e a métrica se chama
- * "Densidade Factual" — nunca "citabilidade", que é o que o produto estima,
- * não o que mede.
- *
- * A decisão de o que exibir vive em `report-model.ts`, sem React, e é testada
+ * A decisão de O QUE exibir vive em `report-model.ts`, sem React e testada
  * lá. Este arquivo só desenha o que aquele modelo permite.
+ *
+ * Contrato que vincula (ADR-004 e emenda da ADR-007): a ressalva de
+ * metodologia fica acima da dobra e vem do domínio; o breakdown das três
+ * categorias é a figura principal; o composto de 0 a 100 vive na ficha
+ * técnica e nunca como nota.
  */
 
 type State =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading' }
-  | { readonly kind: 'error'; readonly message: string }
+  | { readonly kind: 'error'; readonly message: string; readonly retryAfter: number | null }
   | { readonly kind: 'done'; readonly analysis: Analysis };
 
 /** Os estágios reais do pipeline, na ordem em que rodam. */
@@ -36,27 +34,31 @@ const STAGES = [
   'Extraindo o conteúdo principal',
   'Segmentando em sentenças',
   'Classificando cada afirmação',
-  'Calculando o score',
+  'Calculando a proporção',
 ];
+
+const EXEMPLO = 'https://moz.com/learn/seo/what-is-seo';
 
 export function Analyzer() {
   const [url, setUrl] = useState('');
   const [state, setState] = useState<State>({ kind: 'idle' });
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function analisar(alvo: string): Promise<void> {
     setState({ kind: 'loading' });
-
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, includeSuggestions: false }),
+        body: JSON.stringify({ url: alvo, includeSuggestions: false }),
       });
       const body: unknown = await response.json();
 
       if (!response.ok) {
-        setState({ kind: 'error', message: messageOf(body) });
+        setState({
+          kind: 'error',
+          message: messageOf(body),
+          retryAfter: retryAfterOf(response),
+        });
         return;
       }
 
@@ -65,6 +67,7 @@ export function Analyzer() {
         setState({
           kind: 'error',
           message: 'O servidor devolveu uma resposta que não pôde ser lida.',
+          retryAfter: null,
         });
         return;
       }
@@ -72,35 +75,70 @@ export function Analyzer() {
     } catch {
       setState({
         kind: 'error',
-        message: 'Não foi possível falar com o servidor. Tente novamente.',
+        message: 'Não foi possível falar com o servidor. Verifique a conexão.',
+        retryAfter: null,
       });
     }
   }
 
+  const carregando = state.kind === 'loading';
+
   return (
     <>
-      <form onSubmit={onSubmit}>
-        <input
-          type="url"
-          required
-          placeholder="https://exemplo.com/artigo"
-          value={url}
-          onChange={(event) => {
-            setUrl(event.target.value);
-          }}
-          disabled={state.kind === 'loading'}
-        />
-        <button type="submit" disabled={state.kind === 'loading'}>
-          {state.kind === 'loading' ? 'Analisando…' : 'Analisar'}
-        </button>
+      <form
+        className="query"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void analisar(url);
+        }}
+      >
+        <label className="label" htmlFor="url">
+          URL do artigo
+        </label>
+        <div className="query-row">
+          <input
+            id="url"
+            type="url"
+            required
+            placeholder="https://exemplo.com/artigo"
+            value={url}
+            onChange={(event) => {
+              setUrl(event.target.value);
+            }}
+            disabled={carregando}
+          />
+          <button type="submit" disabled={carregando}>
+            {carregando ? 'Analisando…' : 'Analisar'}
+          </button>
+        </div>
       </form>
 
-      {state.kind === 'loading' && <Progress />}
+      {state.kind === 'idle' && (
+        <p className="hint">
+          Cole o link de um artigo publicado. Sem exemplo à mão?{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setUrl(EXEMPLO);
+            }}
+          >
+            use este
+          </button>
+          .
+        </p>
+      )}
+
+      {carregando && <Progress />}
 
       {state.kind === 'error' && (
-        <p className="error" role="alert">
-          {state.message}
-        </p>
+        <div className="error" role="alert">
+          <p>{state.message}</p>
+          {state.retryAfter !== null && (
+            <p className="error-retry">
+              tente novamente em {formatarEspera(state.retryAfter)}
+            </p>
+          )}
+        </div>
       )}
 
       {state.kind === 'done' && <Report analysis={state.analysis} />}
@@ -109,36 +147,53 @@ export function Analyzer() {
 }
 
 /**
- * Mostra os estágios reais e um cronômetro. Não simula avanço por etapa: a
- * rota devolve tudo de uma vez, e uma barra que "progride" sozinha seria
- * animação inventada. O cronômetro é informação verdadeira, e é o que
- * distingue "está trabalhando" de "travou".
+ * Estágios reais e cronômetro. Sem barra de percentual: a rota devolve tudo
+ * de uma vez, e uma barra que progride sozinha seria animação inventada —
+ * este produto não inventa medida, nem sobre si mesmo.
+ *
+ * O cronômetro é informação verdadeira, e é o que distingue "trabalhando" de
+ * "travado" numa operação de ~10 segundos.
  */
 function Progress() {
-  const [seconds, setSeconds] = useState(0);
-  const startedAt = useRef(Date.now());
+  const [segundos, setSegundos] = useState(0);
+  const inicio = useRef(Date.now());
 
   useEffect(() => {
     const id = setInterval(() => {
-      setSeconds(Math.floor((Date.now() - startedAt.current) / 1000));
+      setSegundos(Math.floor((Date.now() - inicio.current) / 1000));
     }, 1000);
     return () => {
       clearInterval(id);
     };
   }, []);
 
+  // Os estágios são listados como SEQUÊNCIA, não como posição.
+  //
+  // Uma versão anterior destacava um deles como "atual" a partir do relógio.
+  // Mas a rota devolve tudo de uma vez: o cliente não faz ideia de onde o
+  // servidor está. Marcar "Extraindo o conteúdo principal" aos 2 segundos era
+  // uma afirmação inventada sobre o estado do sistema — e este produto existe
+  // justamente para não afirmar o que não mediu. A regra vale para ele mesmo.
+  //
+  // O cronômetro é dado verdadeiro, e já resolve "está trabalhando ou travou".
   return (
     <div className="progress" aria-live="polite">
-      <strong>Analisando… {seconds}s</strong>
-      <p style={{ margin: '0.35rem 0 0', fontSize: '0.875rem' }}>
-        A classificação é feita por LLM e costuma levar de 10 a 60 segundos,
-        conforme o tamanho do artigo. Etapas:
+      <div className="progress-head">
+        <strong>Analisando</strong>
+        <span className="progress-clock">{segundos}s</span>
+      </div>
+      <p className="stages-intro">
+        A classificação é feita por LLM e costuma levar de 10 a 60 segundos.
+        O sistema percorre:
       </p>
-      <ol>
+      <ul className="stages">
         {STAGES.map((stage) => (
-          <li key={stage}>{stage}</li>
+          <li className="stage" key={stage}>
+            <span className="stage-tick" aria-hidden="true" />
+            {stage}
+          </li>
         ))}
-      </ol>
+      </ul>
     </div>
   );
 }
@@ -147,100 +202,127 @@ function Report({ analysis }: { analysis: Analysis }) {
   const panel = buildScorePanel(analysis);
   const segments = buildSegments(analysis);
   const legend = buildLegend(segments);
+  const record = buildRecord(analysis);
 
   return (
     <>
-      <section className="card">
-        <ScoreCard panel={panel} />
+      <section className="section rise">
+        <div className="section-head">
+          <h2>A leitura</h2>
+        </div>
+        <ScorePanelView panel={panel} />
 
         {analysis.truncated && (
-          <p className="notice">
-            O artigo excedeu o limite de análise e apenas a primeira parte foi
-            classificada. O score descreve o trecho analisado, não o texto
-            inteiro.
+          <p className="warn">
+            O artigo excedeu o limite de análise e só a primeira parte foi
+            classificada. As proporções descrevem o trecho analisado, não o
+            texto inteiro.
           </p>
         )}
-
         {analysis.suggestionsDegraded && (
-          <p className="notice">
+          <p className="warn">
             As sugestões de reescrita falharam. O restante do relatório está
             completo.
           </p>
         )}
-
-        <p className="meta">
-          {analysis.title ?? analysis.url} ·{' '}
-          {analysis.breakdown.analyzableSentences} de{' '}
-          {analysis.sentences.length} sentenças analisadas · {analysis.language}{' '}
-          · {(analysis.durationMs / 1000).toFixed(1)}s
-        </p>
       </section>
 
-      <h2>Texto classificado</h2>
-      <div className="legend">
-        {legend.map((entry) => (
-          <span key={entry.key} className={entry.className}>
-            {entry.label}
-          </span>
+      <section className="section rise">
+        <div className="section-head">
+          <h2>O texto</h2>
+        </div>
+        {legend.length > 0 && (
+          <div className="legend">
+            {legend.map((entry) => (
+              <LegendItem key={entry.key} entry={entry} />
+            ))}
+          </div>
+        )}
+        <Manuscript segments={segments} />
+      </section>
+
+      <section className="record rise" aria-label="Ficha técnica">
+        {record.map((row) => (
+          <div className="record-row" key={row.key}>
+            <span className="record-key">{row.key}</span>
+            <span className="record-val">{row.value}</span>
+          </div>
         ))}
-      </div>
-      <Highlight segments={segments} />
+      </section>
     </>
   );
 }
 
 /**
- * Score e breakdown saem do MESMO valor.
- *
- * Não há caminho de código que renderize um sem o outro: `panel.kind ===
- * 'scored'` traz os dois campos juntos, e a variante `unscored` não tem
- * número algum para vazar. A garantia da ADR-004 é do tipo, não da disciplina
- * de quem editar este arquivo depois.
+ * O breakdown é a figura principal. O composto de 0 a 100 NÃO aparece aqui —
+ * ele está na ficha técnica, conforme a emenda da ADR-007.
  */
-function ScoreCard({ panel }: { panel: ScorePanel }) {
+function ScorePanelView({ panel }: { panel: ScorePanel }) {
   if (panel.kind === 'unscored') {
     return (
-      <div>
-        <strong>Sem score para este conteúdo</strong>
-        <p style={{ margin: '0.4rem 0 0' }}>{panel.message}</p>
+      <div className="unscored">
+        <h3>Sem medida para este conteúdo</h3>
+        <p>{panel.message}</p>
       </div>
     );
   }
 
+  const descricao = panel.breakdown
+    .map((row) => `${row.label}: ${row.percent}`)
+    .join(', ');
+
   return (
     <>
-      <div className="score-head">
-        <span className="score-value">{panel.score}</span>
-        <span>
-          <span className="score-label">Densidade Factual</span>
-          <br />
-          <span className="score-scale">
-            escala 0–100 · versão {panel.scoreVersion}
-          </span>
-        </span>
-      </div>
-      <dl className="breakdown">
-        {panel.breakdown.map((entry) => (
-          <div key={entry.category} className={`cat-${entry.category}`}>
-            <dt>{entry.label}</dt>
-            <dd>{entry.percent}</dd>
+      <div className="reading">
+        {panel.breakdown.map((row) => (
+          <div className="reading-cell" key={row.category}>
+            <div className={`reading-value cat-text-${row.category}`}>
+              <span
+                className={`stroke-sample cat-${row.category}`}
+                aria-hidden="true"
+              />
+              {row.percent}
+            </div>
+            <div className="reading-name">{row.label}</div>
+            <div className="reading-count">{row.count} sentenças</div>
           </div>
         ))}
-      </dl>
+      </div>
+
+      <div className="bar" role="img" aria-label={descricao}>
+        {panel.breakdown.map((row) => (
+          <span
+            key={row.category}
+            className={`bar-part cat-${row.category}`}
+            style={{ width: `${row.share * 100}%` }}
+          />
+        ))}
+      </div>
+
+      <p className="summary">{panel.summary}</p>
     </>
   );
 }
 
-/**
- * Reconstrói o texto trecho a trecho, colorido pela classificação.
- *
- * Renderizado como TEXTO, nunca como HTML: o conteúdo vem de página
- * arbitrária de terceiro, e injetá-lo como markup seria XSS refletido com
- * passos extras. Há regra de lint bloqueando `dangerouslySetInnerHTML`.
- */
-function Highlight({ segments }: { segments: readonly Segment[] }) {
+function LegendItem({ entry }: { entry: LegendEntry }) {
   return (
-    <div className="text">
+    <span className="legend-item">
+      <span className={`stroke-sample ${entry.className}`} aria-hidden="true" />
+      {entry.label}
+    </span>
+  );
+}
+
+/**
+ * O manuscrito: o texto reconstruído trecho a trecho, marcado.
+ *
+ * Renderizado como TEXTO, nunca como HTML. O conteúdo vem de página arbitrária
+ * de terceiro, e injetá-lo como markup seria XSS refletido com passos extras.
+ * Há regra de lint bloqueando `dangerouslySetInnerHTML`.
+ */
+function Manuscript({ segments }: { segments: readonly Segment[] }) {
+  return (
+    <div className="manuscript">
       {segments.map((segment) => {
         if (segment.kind === 'classified') {
           return (
@@ -261,6 +343,19 @@ function Highlight({ segments }: { segments: readonly Segment[] }) {
       })}
     </div>
   );
+}
+
+function formatarEspera(segundos: number): string {
+  if (segundos < 60) return `${segundos} s`;
+  if (segundos < 3600) return `${Math.ceil(segundos / 60)} min`;
+  return `${Math.ceil(segundos / 3600)} h`;
+}
+
+function retryAfterOf(response: Response): number | null {
+  const header = response.headers.get('retry-after');
+  if (header === null) return null;
+  const segundos = Number(header);
+  return Number.isFinite(segundos) && segundos > 0 ? segundos : null;
 }
 
 function messageOf(body: unknown): string {

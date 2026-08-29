@@ -6,8 +6,7 @@ import type { ExclusionReason, SentenceId } from '../core/domain/sentence.js';
  * Decide o que cada resultado PERMITE exibir, antes de qualquer JSX.
  *
  * É um arquivo `.ts` sem React de propósito: a decisão fica testável sem
- * ambiente de DOM, e o teste sobrevive ao redesign do M3 — ele trava a regra,
- * não a marcação.
+ * ambiente de DOM, e o teste trava a REGRA, não a marcação.
  */
 
 export const CATEGORY_LABEL: Record<ClaimCategory, string> = {
@@ -18,15 +17,14 @@ export const CATEGORY_LABEL: Record<ClaimCategory, string> = {
 
 export const UNSCORED_MESSAGE: Record<UnscoredReason, string> = {
   INSUFFICIENT_CONTENT:
-    'O texto tem poucas sentenças analisáveis para que um score signifique ' +
-    'alguma coisa. Uma proporção medida sobre meia dúzia de frases varia ' +
-    'demais para ser útil.',
+    'O texto tem poucas sentenças analisáveis para que uma proporção signifique ' +
+    'alguma coisa. Medida sobre meia dúzia de frases, ela varia demais para ser útil.',
   NO_CLAIMS_FOUND:
     'Nenhuma afirmação verificável foi encontrada. O texto pode ser ' +
     'inteiramente opinativo, narrativo ou promocional — nesse caso não há o ' +
-    'que medir, e não é o mesmo que medir zero.',
+    'que medir, e isso não é o mesmo que medir zero.',
   INCONSISTENT_INPUT:
-    'A classificação devolveu dados inconsistentes e o score foi suprimido. ' +
+    'A classificação devolveu dados inconsistentes e a medida foi suprimida. ' +
     'Publicar um número derivado daqui seria pior que não publicar nenhum.',
 };
 
@@ -43,25 +41,27 @@ export interface BreakdownRow {
   readonly count: number;
   /** Percentual já formatado, ou `—` quando não há denominador. */
   readonly percent: string;
+  /** Fração 0..1, para a barra proporcional. */
+  readonly share: number;
 }
 
 /**
- * O painel do score.
+ * O painel do resultado.
  *
- * A variante `scored` carrega o número E o breakdown no MESMO objeto: não
- * existe estado representável em que um apareça sem o outro. A ADR-004 passa
- * a ser garantida pelo tipo, e não por dois condicionais que alguém precisa
- * lembrar de manter em sincronia.
+ * A variante `scored` carrega o breakdown — a FIGURA PRINCIPAL, conforme a
+ * emenda da ADR-007. O composto de 0 a 100 NÃO está aqui: ele vive na ficha
+ * técnica, porque a régua é comprimida e instável, e um número em destaque
+ * comunicaria precisão que a medição não tem.
  *
  * A variante `unscored` não tem campo numérico algum — métrica derivada não
- * tem como vazar para uma tela sem score, porque não existe nela.
+ * tem como vazar para uma tela sem medida, porque não existe nela.
  */
 export type ScorePanel =
   | {
       readonly kind: 'scored';
-      readonly score: number;
-      readonly scoreVersion: string;
       readonly breakdown: readonly BreakdownRow[];
+      /** Frase que diz, em português, o que as proporções significam. */
+      readonly summary: string;
     }
   | {
       readonly kind: 'unscored';
@@ -83,13 +83,12 @@ export function buildScorePanel(analysis: Analysis): ScorePanel {
 
   return {
     kind: 'scored',
-    score: analysis.outcome.score,
-    scoreVersion: analysis.scoreVersion,
     breakdown: [
       row('SOURCED', breakdown.sourced, total),
       row('UNSOURCED', breakdown.unsourced, total),
       row('OPINION', breakdown.opinion, total),
     ],
+    summary: summarize(breakdown.sourced, breakdown.unsourced),
   };
 }
 
@@ -103,18 +102,33 @@ function row(
     label: CATEGORY_LABEL[category],
     count,
     percent: total === 0 ? '—' : `${Math.round((count / total) * 100)}%`,
+    share: total === 0 ? 0 : count / total,
   };
+}
+
+/**
+ * A leitura em uma frase.
+ *
+ * Fala de AFIRMAÇÕES, não do texto inteiro: opinião não é afirmação pendente,
+ * e incluí-la no denominador faria a frase acusar o autor de algo que ele não
+ * fez. É a mesma razão pela qual o `GAP` da ADR-003 exclui opinião.
+ */
+function summarize(sourced: number, unsourced: number): string {
+  const claims = sourced + unsourced;
+  if (claims === 0) return 'O texto não faz afirmações verificáveis.';
+  if (unsourced === 0) {
+    return `Todas as ${claims} afirmações do texto citam fonte.`;
+  }
+  return `Das ${claims} afirmações do texto, ${unsourced} não citam fonte.`;
 }
 
 /**
  * Um trecho do texto, com o motivo pelo qual está do jeito que está.
  *
  * `unanalyzed` existe porque havia duas ausências diferentes renderizando
- * idênticas: a sentença que o segmentador descartou (título, lista,
- * fragmento) e a sentença analisável que ficou de fora do cap de truncagem.
- * Pintar as duas de cinza sob a legenda "fora da análise" atribuía à segunda
- * uma razão falsa — e honestidade sobre o que foi medido é o contrato deste
- * produto (ADR-004), não um detalhe de apresentação.
+ * idênticas: a sentença que o segmentador descartou e a sentença analisável
+ * que ficou fora do cap de truncagem. Pintar as duas igual atribuía à segunda
+ * uma razão falsa.
  */
 export type Segment =
   | {
@@ -180,7 +194,7 @@ export function buildSegments(analysis: Analysis): readonly Segment[] {
  * A legenda descreve apenas o que a tela de fato contém.
  *
  * Anunciar uma categoria ausente convida o leitor a procurar no texto uma
- * cor que não está lá.
+ * marca que não está lá.
  */
 export interface LegendEntry {
   readonly key: string;
@@ -188,7 +202,9 @@ export interface LegendEntry {
   readonly label: string;
 }
 
-export function buildLegend(segments: readonly Segment[]): readonly LegendEntry[] {
+export function buildLegend(
+  segments: readonly Segment[],
+): readonly LegendEntry[] {
   const entries: LegendEntry[] = [];
   const kinds = new Set(segments.map((segment) => segment.kind));
   const categories = new Set(
@@ -210,15 +226,63 @@ export function buildLegend(segments: readonly Segment[]): readonly LegendEntry[
     entries.push({
       key: 'unanalyzed',
       className: 'unanalyzed',
-      label: 'Analisável, mas fora do limite de análise',
+      label: 'Fora do limite de análise',
     });
   }
   if (kinds.has('excluded')) {
     entries.push({
       key: 'excluded',
       className: 'excluded',
-      label: 'Fora da análise (título, lista, fragmento)',
+      label: 'Fora da análise',
     });
   }
   return entries;
+}
+
+/**
+ * A ficha técnica — e é AQUI que o composto de 0 a 100 mora.
+ *
+ * Não é degredo: é o lugar honesto. A régua é comprimida (o artigo escolhido
+ * como modelo de bom conteúdo SEO tira 13 de 100) e instável (uma em seis
+ * execuções diverge 8 pontos). Um número nessas condições é diagnóstico, não
+ * resultado — e diagnóstico fica na ficha, ao lado da versão e do modelo.
+ *
+ * Quando a distribuição for medida e a forma final decidida, o campo muda de
+ * valor sem que a hierarquia da tela precise mudar.
+ */
+export interface RecordRow {
+  readonly key: string;
+  readonly value: string;
+}
+
+export function buildRecord(analysis: Analysis): readonly RecordRow[] {
+  const rows: RecordRow[] = [
+    {
+      key: 'artigo',
+      value: [
+        analysis.title ?? analysis.url,
+        analysis.language,
+        `${analysis.sentences.length} sentenças, ${analysis.breakdown.analyzableSentences} analisadas`,
+      ].join(' · '),
+    },
+  ];
+
+  if (analysis.outcome.kind === 'scored') {
+    const densidade = Math.round(analysis.breakdown.factualDensity * 100);
+    rows.push({
+      key: 'medição',
+      value: [
+        `densidade factual ${densidade}%`,
+        `composto ${analysis.outcome.score}`,
+        `score v${analysis.scoreVersion}`,
+      ].join(' · '),
+    });
+  }
+
+  rows.push({
+    key: 'execução',
+    value: `${(analysis.durationMs / 1000).toFixed(1)} s`,
+  });
+
+  return rows;
 }

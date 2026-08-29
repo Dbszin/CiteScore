@@ -4,6 +4,7 @@ import { buildMethodology } from '../../src/core/domain/methodology.js';
 import type { Sentence } from '../../src/core/domain/sentence.js';
 import {
   buildLegend,
+  buildRecord,
   buildScorePanel,
   buildSegments,
 } from '../../src/components/report-model.js';
@@ -45,13 +46,58 @@ function makeAnalysis(overrides: Partial<Analysis> = {}): Analysis {
  * arquivo trava a regra, não a marcação, então sobrevive ao redesign do M3.
  */
 describe('buildScorePanel — invariante da ADR-004', () => {
-  it('score e breakdown saem juntos, no mesmo valor', () => {
+  it('o painel traz o breakdown como figura principal', () => {
     const panel = buildScorePanel(makeAnalysis());
 
     expect(panel.kind).toBe('scored');
     if (panel.kind !== 'scored') throw new Error('esperado scored');
-    expect(panel.score).toBe(42);
     expect(panel.breakdown).toHaveLength(3);
+    expect(panel.summary.length).toBeGreaterThan(10);
+  });
+
+  /**
+   * O requisito central da emenda da ADR-007.
+   *
+   * A régua é comprimida (o artigo escolhido como modelo de bom conteúdo SEO
+   * tira 13 de 100) e instável (uma em seis execuções diverge 8 pontos). Um
+   * número nessas condições não pode ser a figura principal — e a garantia
+   * é do TIPO: o painel não tem onde carregá-lo.
+   */
+  it('o composto de 0 a 100 NÃO está no painel', () => {
+    const panel = buildScorePanel(makeAnalysis());
+
+    expect(panel).not.toHaveProperty('score');
+    expect(JSON.stringify(panel)).not.toContain('42');
+  });
+
+  it('o composto vive na ficha técnica, ao lado da versão e do modelo', () => {
+    const record = buildRecord(makeAnalysis());
+    const medicao = record.find((linha) => linha.key === 'medição');
+
+    expect(medicao?.value).toContain('composto 42');
+    expect(medicao?.value).toContain('score v1.0.0');
+    // Diagnóstico entre diagnósticos, não resultado em destaque.
+    expect(medicao?.value).toContain('densidade factual');
+  });
+
+  it('a ficha técnica de um resultado SEM medida omite a linha de medição', () => {
+    const record = buildRecord(
+      makeAnalysis({ outcome: { kind: 'unscored', reason: 'NO_CLAIMS_FOUND' } }),
+    );
+
+    expect(record.find((linha) => linha.key === 'medição')).toBeUndefined();
+    expect(record.map((linha) => linha.key)).toEqual(['artigo', 'execução']);
+  });
+
+  it('a síntese fala de AFIRMAÇÕES, não do texto inteiro', () => {
+    // Opinião não é afirmação pendente; incluí-la no denominador acusaria o
+    // autor de algo que ele não fez. Mesma razão do GAP na ADR-003.
+    const panel = buildScorePanel(makeAnalysis());
+    if (panel.kind !== 'scored') throw new Error('esperado scored');
+
+    // 3 SOURCED + 5 UNSOURCED = 8 afirmações; os 2 OPINION ficam de fora.
+    expect(panel.summary).toContain('8 afirmações');
+    expect(panel.summary).toContain('5 não citam fonte');
   });
 
   it('o breakdown cobre as três categorias, sempre', () => {
