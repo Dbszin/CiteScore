@@ -15,6 +15,15 @@ import { IntlSentenceSegmenter } from '../segment/intl-sentence-segmenter.js';
 import { NoopSuggestionWriter } from '../suggest/noop-suggestion-writer.js';
 import type { ClassifierUsage } from '../../core/ports/claim-classifier.js';
 import type { CostRecorder } from '../../core/ports/cost-recorder.js';
+import type { BudgetGuard } from '../../core/ports/budget-guard.js';
+import type { RateLimiter } from '../../core/ports/rate-limiter.js';
+import type { Clock } from '../../core/ports/clock.js';
+import { RedisRateLimiter } from '../ratelimit/redis-rate-limiter.js';
+import { RedisBudgetGuard } from '../budget/redis-budget-guard.js';
+import { RedisCostRecorder } from '../redis/redis-cost-recorder.js';
+import { UpstashRedisClient } from '../redis/upstash-client.js';
+import { dolaresParaMicros } from '../redis/pricing.js';
+import type { Env } from './env.js';
 import { loadEnv } from './env.js';
 
 /**
@@ -50,8 +59,60 @@ class ConsoleCostRecorder implements CostRecorder {
   }
 }
 
+export interface Guardas {
+  readonly rateLimiter: RateLimiter;
+  readonly budgetGuard: BudgetGuard;
+  readonly costRecorder: CostRecorder;
+}
+
+/**
+ * Escolhe as guardas pela PRESENÇA DE CREDENCIAIS, não por `NODE_ENV`.
+ *
+ * Duas propriedades que a escolha por ambiente não daria: dá para exercitar
+ * os adapters reais localmente, e um deploy mal configurado continua falhando
+ * alto — sem as credenciais, os adapters de desenvolvimento entram e
+ * `assertNotProduction` derruba o primeiro request, em vez de a aplicação
+ * rodar sem defesa em silêncio.
+ */
+export function escolherGuardas(env: Env, clock: Clock): Guardas {
+  const url = env.REDIS_URL ?? '';
+  const token = env.REDIS_TOKEN ?? '';
+
+  if (url.length === 0 || token.length === 0) {
+    return {
+      rateLimiter: new AllowAllRateLimiter(),
+      budgetGuard: new UnlimitedBudgetGuard(),
+      costRecorder: new ConsoleCostRecorder(),
+    };
+  }
+
+  const client = new UpstashRedisClient(url, token);
+  const pricing = {
+    inputUsdPerMTok: env.MODEL_INPUT_USD_PER_MTOK,
+    outputUsdPerMTok: env.MODEL_OUTPUT_USD_PER_MTOK,
+  };
+  const keyPrefix = 'citescore';
+
+  return {
+    rateLimiter: new RedisRateLimiter(client, clock, {
+      requestsPerHour: env.RATE_LIMIT_PER_HOUR,
+      keyPrefix,
+    }),
+    budgetGuard: new RedisBudgetGuard(client, clock, {
+      dailyBudgetMicros: dolaresParaMicros(env.DAILY_BUDGET_USD),
+      maxRequestMicros: dolaresParaMicros(env.MAX_REQUEST_BUDGET_USD),
+      pricing,
+      outputRatio: env.BUDGET_OUTPUT_RATIO,
+      keyPrefix,
+    }),
+    costRecorder: new RedisCostRecorder({ pricing }),
+  };
+}
+
 function buildDeps(): AnalyzeUrlDeps {
   const env = loadEnv();
+  const clock = new SystemClock();
+  const guardas = escolherGuardas(env, clock);
 
   const classifier = new HybridClassifier(
     new ClaudeClassifier(createAnthropicClient(env.ANTHROPIC_API_KEY), {
@@ -70,13 +131,10 @@ function buildDeps(): AnalyzeUrlDeps {
     segmenter: new IntlSentenceSegmenter(),
     classifier,
     suggestionWriter: new NoopSuggestionWriter(),
-    // TODO(M4/rodada 3): trocar pelos adapters de Upstash Redis. Enquanto
-    // forem estes, um deploy em produção falha no primeiro request — de
-    // propósito. Teto aprovado: US$ 1/dia.
-    rateLimiter: new AllowAllRateLimiter(),
-    budgetGuard: new UnlimitedBudgetGuard(),
-    costRecorder: new ConsoleCostRecorder(),
-    clock: new SystemClock(),
+    rateLimiter: guardas.rateLimiter,
+    budgetGuard: guardas.budgetGuard,
+    costRecorder: guardas.costRecorder,
+    clock,
     config: {
       methodologyUrl: env.METHODOLOGY_URL,
       model: env.ANTHROPIC_MODEL,

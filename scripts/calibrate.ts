@@ -43,8 +43,15 @@ const PRICING: Record<string, { input: number; output: number }> = {
 };
 
 const TETO_DOLARES = Number(process.argv[2] ?? '0.50');
-/** Divergência acima disto indica problema, e gastar mais não revela qual. */
-const CUSTO_ESPERADO_POR_ARTIGO = 0.007;
+/**
+ * Divergência acima disto indica problema, e gastar mais não revela qual.
+ *
+ * RECALIBRADO em 2026-08-29 com o valor MEDIDO. O 0.007 anterior vinha da
+ * projeção da ADR-005, que a própria calibração mostrou estar ~7x abaixo — e
+ * por isso o guard abortava em artigos grandes legítimos, confundindo "caro"
+ * com "anômalo". O custo real medido pela rota é US$ 0,0155 por artigo típico.
+ */
+const CUSTO_ESPERADO_POR_ARTIGO = 0.02;
 const FATOR_DIVERGENCIA = 5;
 
 function loadEnvLocal(): Record<string, string> {

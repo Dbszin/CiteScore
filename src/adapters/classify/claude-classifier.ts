@@ -187,6 +187,16 @@ export class ClaudeClassifier implements ClaimClassifier {
       model: this.options.model,
       max_tokens:
         this.options.maxTokens ?? deriveMaxTokens(this.options.maxSentencesPerCall),
+      // Classificar não é gerar texto: não há valor em variedade de resposta,
+      // só em concordar consigo mesmo. Sem isto o SDK usa o default do
+      // provedor, e a amostragem produzia leituras diferentes do MESMO texto.
+      //
+      // MEDIDO, não suposto. Três execuções do artigo do Moz, com as mesmas
+      // 100 sentenças analisáveis, deram scores 24, 17 e 25 — e OPINION variou
+      // de 41 para 18. A variação no mesmo artigo (8 pontos) era o DOBRO da
+      // separação entre artigos de tipos diferentes (4 pontos): o ruído
+      // superava o sinal que o produto existe para medir.
+      temperature: 0,
       // `cache_control` é enviado mesmo quando o modelo tem prefixo mínimo
       // alto: é inofensivo, e passa a valer sozinho se o tier subir. Em
       // `claude-haiku-4-5` o mínimo é 4096 tokens e a rubrica tem ~800, então
@@ -248,21 +258,42 @@ export class ClaudeClassifier implements ClaimClassifier {
           this.buildRequest(system, renderBatch(batch)),
         );
       } catch (cause) {
-        toDomainError(cause);
+        // Os lotes anteriores JÁ FORAM PAGOS. Sem levar esse uso junto, a
+        // reserva de orçamento seria devolvida integral sobre dinheiro real —
+        // ou, na versão anterior, não seria devolvida de jeito nenhum (ADR-009).
+        throw analysisError('CLASSIFIER_FAILED', cause, null, usageOuNulo(usage));
       }
+
+      // Contabiliza ANTES de qualquer checagem que possa lançar.
+      //
+      // A chamada já voltou, então já foi cobrada — inclusive quando a
+      // resposta é uma recusa. Somar depois da checagem de recusa fazia o
+      // lote recusado não entrar no `partialUsage`, e a liquidação devolvia a
+      // reserva sobre dinheiro gasto de verdade. Como `CLASSIFIER_REFUSED` é
+      // acionável por quem envia o conteúdo, cada tentativa que provocasse
+      // recusa gastaria sem aparecer no contador.
+      usage = addUsage(usage, response);
 
       // A recusa chega como HTTP 200 com `stop_reason: "refusal"`, não como
       // exceção. Precisa ser checada ANTES de olhar o conteúdo.
       if (response.stop_reason === 'refusal') {
-        throw analysisError('CLASSIFIER_REFUSED');
+        throw analysisError(
+          'CLASSIFIER_REFUSED',
+          undefined,
+          null,
+          usageOuNulo(usage),
+        );
       }
-
-      usage = addUsage(usage, response);
 
       const raw = response.parsed_output ?? response.parsed ?? null;
       const parsed = ClassificationBatchSchema.safeParse(raw);
       if (!parsed.success) {
-        throw analysisError('CLASSIFIER_INVALID_OUTPUT', parsed.error);
+        throw analysisError(
+          'CLASSIFIER_INVALID_OUTPUT',
+          parsed.error,
+          null,
+          usageOuNulo(usage),
+        );
       }
 
       // Índices locais 0..N-1 dentro do lote, traduzidos de volta pela
@@ -318,4 +349,17 @@ export function renderBatch(sentences: readonly Sentence[]): string {
     (sentence, localIndex) => `[${localIndex}] ${sentence.text}`,
   );
   return `Classifique cada sentença abaixo.\n\n${lines.join('\n')}`;
+}
+
+/**
+ * `null` quando nenhum lote chegou a ser pago — a distinção importa para a
+ * liquidação, que devolve a reserva integral só nesse caso.
+ */
+function usageOuNulo(usage: ClassifierUsage): ClassifierUsage | null {
+  const total =
+    usage.inputTokens +
+    usage.outputTokens +
+    usage.cacheCreationInputTokens +
+    usage.cacheReadInputTokens;
+  return total === 0 ? null : usage;
 }

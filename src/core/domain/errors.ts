@@ -1,3 +1,5 @@
+import type { ClassifierUsage } from '../ports/claim-classifier.js';
+
 /**
  * União fechada de códigos de erro. Fechada de propósito: o mapa de status
  * HTTP na rota usa checagem de exaustividade, então adicionar um código aqui
@@ -48,6 +50,14 @@ export class AnalysisError extends Error {
      * que precisa dele (cabeçalho `Retry-After`) e ela só recebe a exceção.
      */
     readonly retryAfterSeconds: number | null = null,
+    /**
+     * Uso JÁ PAGO quando a operação falhou no meio (ADR-009).
+     *
+     * O `ClaudeClassifier` acumula `usage` a cada lote bem-sucedido e o
+     * descartava ao lançar. O dado sempre existiu — faltava carregá-lo até a
+     * liquidação da reserva, que precisa saber quanto devolver.
+     */
+    readonly partialUsage: ClassifierUsage | null = null,
   ) {
     super(`${code}: ${userMessage}`);
     this.name = 'AnalysisError';
@@ -106,6 +116,13 @@ export function analysisError(
   code: AnalysisErrorCode,
   cause?: unknown,
   retryAfterSeconds: number | null = null,
+  partialUsage: ClassifierUsage | null = null,
 ): AnalysisError {
-  return new AnalysisError(code, USER_MESSAGES[code], cause, retryAfterSeconds);
+  return new AnalysisError(
+    code,
+    USER_MESSAGES[code],
+    cause,
+    retryAfterSeconds,
+    partialUsage,
+  );
 }

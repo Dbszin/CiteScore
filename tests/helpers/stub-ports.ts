@@ -8,6 +8,7 @@ import type { BudgetGuard, BudgetDecision } from '../../src/core/ports/budget-gu
 import type {
   ClaimClassifier,
   ClassificationResult,
+  ClassifierUsage,
 } from '../../src/core/ports/claim-classifier.js';
 import type { Clock } from '../../src/core/ports/clock.js';
 import type { ContentExtractor } from '../../src/core/ports/content-extractor.js';
@@ -188,6 +189,16 @@ export class StubBudgetGuard implements BudgetGuard {
   /** Estimativa recebida, para verificar que o pré-flight foi alimentado. */
   authorizedWith: number | null = null;
 
+  /**
+   * Liquidações observadas. É o que torna a invariante da ADR-009
+   * verificável: autorizou, liquidou. Sem registrar, "sempre liquida" seria
+   * intenção, não fato.
+   */
+  readonly settlements: {
+    estimatedInputTokens: number;
+    actualUsage: ClassifierUsage | null;
+  }[] = [];
+
   constructor(
     private readonly calls: string[],
     private readonly allowed = true,
@@ -203,6 +214,14 @@ export class StubBudgetGuard implements BudgetGuard {
       estimatedInputTokens,
       retryAfterSeconds: this.retryAfterSeconds,
     };
+  }
+
+  async settle(
+    estimatedInputTokens: number,
+    actualUsage: ClassifierUsage | null,
+  ): Promise<void> {
+    this.calls.push('settle');
+    this.settlements.push({ estimatedInputTokens, actualUsage });
   }
 }
 

@@ -65,6 +65,7 @@ describe('createAnalyzeUrl', () => {
       'estimateInputTokens',
       'budget',
       'classify',
+      'settle',
       'cost',
     ]);
   });
@@ -105,6 +106,30 @@ describe('createAnalyzeUrl', () => {
     );
     expect(calls).not.toContain('classify');
     expect(calls).not.toContain('cost');
+  });
+
+  it('recusa por tamanho vira REQUEST_TOO_EXPENSIVE, não BUDGET_EXCEEDED', async () => {
+    // As duas recusas do budget guard são opostas para quem está na tela:
+    // "este artigo é caro demais" tem saída, "acabou a cota" não tem.
+    const caroDemais = {
+      async authorize() {
+        return {
+          allowed: false,
+          reason: 'request_too_expensive' as const,
+          estimatedInputTokens: 999_999,
+          retryAfterSeconds: null,
+        };
+      },
+      async settle(): Promise<void> {
+        // Recusa não cria reserva, então não há o que liquidar.
+      },
+    };
+    const { deps } = makeHarness({ budgetGuard: caroDemais });
+
+    await expectAnalysisError(
+      createAnalyzeUrl(deps)(INPUT),
+      'REQUEST_TOO_EXPENSIVE',
+    );
   });
 
   it('alimenta o budget guard com a estimativa do classificador', async () => {
@@ -183,6 +208,119 @@ describe('createAnalyzeUrl', () => {
 
     await expectAnalysisError(createAnalyzeUrl(deps)(INPUT), 'BUDGET_EXCEEDED');
     expect(calls).not.toContain('classify');
+  });
+
+  /**
+   * A INVARIANTE DA ADR-009: autorizou, liquidou.
+   *
+   * Antes disso, uma falha do classificador deixava a pré-cobrança presa por
+   * 48h. Medido pela revisão: 100 análises que falharam sem gastar um token
+   * consumiram US$ 0,9931 de US$ 1,00, e a análise legítima seguinte foi
+   * recusada. A defesa de custo tinha virado negação de serviço.
+   */
+  it('liquida a reserva mesmo quando a classificação FALHA', async () => {
+    const calls: string[] = [];
+    const sentences = makeSentences(20);
+    const budgetGuard = new StubBudgetGuard(calls);
+    const quebrado = {
+      async classify(): Promise<never> {
+        calls.push('classify');
+        throw analysisError('CLASSIFIER_FAILED');
+      },
+      async estimateInputTokens(): Promise<number> {
+        return 4_244;
+      },
+    };
+    const { deps } = makeHarness(
+      { budgetGuard, classifier: quebrado },
+      { sentences },
+    );
+
+    await expectAnalysisError(createAnalyzeUrl(deps)(INPUT), 'CLASSIFIER_FAILED');
+
+    expect(budgetGuard.settlements).toHaveLength(1);
+    // `null` significa "nada foi gasto": a reserva volta integral.
+    expect(budgetGuard.settlements[0]?.actualUsage).toBeNull();
+    expect(budgetGuard.settlements[0]?.estimatedInputTokens).toBe(4_244);
+  });
+
+  it('devolve só o não gasto quando a falha foi PARCIAL', async () => {
+    const calls: string[] = [];
+    const sentences = makeSentences(20);
+    const budgetGuard = new StubBudgetGuard(calls);
+    const parcial = {
+      inputTokens: 1_700,
+      outputTokens: 900,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    };
+    const meioCaminho = {
+      async classify(): Promise<never> {
+        // Dois de cinco lotes já foram pagos antes de falhar.
+        throw analysisError('CLASSIFIER_REFUSED', undefined, null, parcial);
+      },
+      async estimateInputTokens(): Promise<number> {
+        return 4_244;
+      },
+    };
+    const { deps } = makeHarness(
+      { budgetGuard, classifier: meioCaminho },
+      { sentences },
+    );
+
+    await expectAnalysisError(
+      createAnalyzeUrl(deps)(INPUT),
+      'CLASSIFIER_REFUSED',
+    );
+
+    // Devolver a estimativa INTEIRA zeraria o contador sobre dinheiro real.
+    expect(budgetGuard.settlements[0]?.actualUsage).toEqual(parcial);
+  });
+
+  it('a liquidação NÃO mascara o erro original', async () => {
+    const calls: string[] = [];
+    const sentences = makeSentences(20);
+    const guardaQueFalhaAoLiquidar = {
+      async authorize(estimatedInputTokens: number) {
+        calls.push('budget');
+        return {
+          allowed: true,
+          reason: 'ok' as const,
+          estimatedInputTokens,
+          retryAfterSeconds: null,
+        };
+      },
+      async settle(): Promise<void> {
+        // Contrato: settle NUNCA lança. Se lançasse, o erro de contabilidade
+        // substituiria a causa que o usuário e o log precisam ver.
+      },
+    };
+    const quebrado = {
+      async classify(): Promise<never> {
+        throw analysisError('CLASSIFIER_REFUSED');
+      },
+      async estimateInputTokens(): Promise<number> {
+        return 100;
+      },
+    };
+    const { deps } = makeHarness(
+      { budgetGuard: guardaQueFalhaAoLiquidar, classifier: quebrado },
+      { sentences },
+    );
+
+    await expectAnalysisError(
+      createAnalyzeUrl(deps)(INPUT),
+      'CLASSIFIER_REFUSED',
+    );
+  });
+
+  it('liquida com o uso REAL no caminho de sucesso', async () => {
+    const { deps, budgetGuard } = makeHarness();
+
+    await createAnalyzeUrl(deps)(INPUT);
+
+    expect(budgetGuard.settlements).toHaveLength(1);
+    expect(budgetGuard.settlements[0]?.actualUsage).not.toBeNull();
   });
 
   it('recusa página-índice antes de gastar', async () => {

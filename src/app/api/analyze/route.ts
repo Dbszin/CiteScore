@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAnalyzeUrl } from '../../../adapters/config/container.js';
 import type { AnalysisErrorCode } from '../../../core/domain/errors.js';
 import { isAnalysisError, USER_MESSAGES } from '../../../core/domain/errors.js';
+import { clientKeyFrom } from './client-key.js';
 import { HTTP_STATUS } from './error-status.js';
 
 /**
@@ -83,7 +84,7 @@ export async function POST(request: Request): Promise<Response> {
     const analyzeUrl = getAnalyzeUrl();
     const analysis = await analyzeUrl({
       url,
-      clientKey: clientKeyOf(request),
+      clientKey: clientKeyFrom(request.headers),
       includeSuggestions,
     });
     return NextResponse.json({ ok: true, analysis });
@@ -123,18 +124,4 @@ function readIncludeSuggestions(body: unknown): boolean {
   if (typeof body !== 'object' || body === null) return true;
   const value = (body as Record<string, unknown>)['includeSuggestions'];
   return typeof value === 'boolean' ? value : true;
-}
-
-/**
- * Chave de rate limit.
- *
- * `x-forwarded-for` é falsificável por quem fala direto com o servidor, mas
- * na Vercel o cabeçalho é reescrito pela borda. Quando o rate limiter real
- * entrar (rodada 3), esta função é o ponto único a endurecer.
- */
-function clientKeyOf(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const first = forwarded?.split(',')[0]?.trim();
-  if (first !== undefined && first.length > 0) return first;
-  return request.headers.get('x-real-ip') ?? 'unknown';
 }

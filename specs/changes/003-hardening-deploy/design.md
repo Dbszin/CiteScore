@@ -23,24 +23,36 @@ src/
 │       ├── redis-client.ts                  [NOVO]    interface estreita
 │       ├── upstash-client.ts                [NOVO]    implementação REST
 │       ├── fake-redis-client.ts             [NOVO]    para teste, sem rede
-│       └── redis-cost-recorder.ts           [NOVO]    reconcilia o contador
+│       ├── pricing.ts                       [NOVO]    micro-dólares inteiros
+│       └── redis-cost-recorder.ts           [NOVO]    observabilidade (ADR-009)
 ├── app/api/analyze/
 │   ├── error-status.ts                      [MODIFICADO] 3 códigos novos
+│   ├── client-key.ts                        [NOVO]    derivação endurecida
 │   └── route.ts                             [MODIFICADO] Retry-After
 └── core/
-    └── domain/errors.ts                     [MODIFICADO] união de erros
+    ├── domain/errors.ts                     [MODIFICADO] união + partialUsage
+    ├── ports/budget-guard.ts                [MODIFICADO] settle (ADR-009)
+    └── usecases/analyze-url.ts              [MODIFICADO] liquida sempre
 
 tests/
 ├── adapters/
 │   ├── fetch/toctou.test.ts                 [NOVO] prova a pinagem
-│   ├── redis/redis-rate-limiter.test.ts     [NOVO]
-│   ├── redis/redis-budget-guard.test.ts     [NOVO]
-│   └── redis/redis-cost-recorder.test.ts    [NOVO]
-└── contract/error-status.test.ts            [MODIFICADO]
+│   ├── redis/guards.test.ts                 [NOVO] limiter, guard, settle
+│   ├── redis/client-key.test.ts             [NOVO]
+│   └── redis/container-selection.test.ts    [NOVO]
+├── contract/analyze-payload.test.ts         [MODIFICADO]
+└── core/analyze-url.test.ts                 [MODIFICADO] invariante da reserva
 ```
 
-`src/core/**` ganha apenas três valores na união de erros. Nenhuma porta muda de
-assinatura, e nada em `core` passa a conhecer Redis ou socket.
+**Correção desta árvore (2026-08-29):** a versão original afirmava "nenhuma
+porta muda de assinatura" e listava nomes de teste que nunca existiram. A
+[ADR-009](../../decisions/009-reserva-de-orcamento.md) tornou a primeira
+afirmação falsa — `BudgetGuard` ganhou `settle`, obrigatório — e a segunda
+sempre foi imprecisa.
+
+`src/core/**` passa a ter: três valores na união de erros, o campo
+`partialUsage` no `AnalysisError`, e `settle` na porta `BudgetGuard`. Nada em
+`core` conhece Redis ou socket.
 
 ---
 
@@ -238,6 +250,85 @@ não pode consumir orçamento; caso contrário o teto se esgota sozinho sob ataq
 
 **`retryAfterSeconds`** para `daily_cap_reached` são os segundos até a virada do
 dia UTC, obtidos do `ttl` da chave.
+
+### Ciclo de vida da reserva — EMENDA da [ADR-009](../../decisions/009-reserva-de-orcamento.md)
+
+A versão original desta seção descreveu "cobra, gasta, reconcilia" assumindo
+que a etapa paga sempre termina. Não termina. O caminho de falha deixava a
+pré-cobrança presa por 48h, o que converteu a defesa de custo em negação de
+serviço — medido: US$ 0,9931 do teto consumidos por 100 análises que não
+gastaram nada.
+
+```typescript
+// src/core/ports/budget-guard.ts — MUDANÇA DE CONTRATO
+
+export interface BudgetGuard {
+  /** Pre-flight: chamado ANTES de qualquer token ser gasto. */
+  authorize(estimatedInputTokens: number): Promise<BudgetDecision>;
+
+  /**
+   * Fecha a reserva criada por `authorize`. OBRIGATÓRIO, não opcional: uma
+   * implementação que não liquide reintroduz o vazamento em silêncio, e
+   * método opcional deixaria isso passar despercebido.
+   *
+   * `estimatedInputTokens` DEVE ser o mesmo valor passado a `authorize`. O
+   * guard reproduz o que cobrou aplicando a mesma função pura aos mesmos
+   * argumentos — não infere a partir do uso real, que é outro número.
+   *
+   * `actualUsage` é o que de fato foi gasto: o uso completo no sucesso, o uso
+   * PARCIAL quando a chamada falhou depois de lotes já pagos, e `null` quando
+   * nada foi gasto.
+   *
+   * NUNCA lança. Liquidar acontece depois do trabalho; derrubar uma análise
+   * concluída por falha de contabilidade troca valor entregue por precisão de
+   * contador. No caminho de erro, lançar aqui mascararia a causa real.
+   */
+  settle(
+    estimatedInputTokens: number,
+    actualUsage: ClassifierUsage | null,
+  ): Promise<void>;
+}
+```
+
+```typescript
+// src/core/domain/errors.ts — ACRÉSCIMO
+
+export class AnalysisError extends Error {
+  constructor(
+    readonly code: AnalysisErrorCode,
+    readonly userMessage: string,
+    override readonly cause?: unknown,
+    readonly retryAfterSeconds: number | null = null,
+    /**
+     * Uso já pago quando a operação falhou no meio.
+     *
+     * O `ClaudeClassifier` acumula `usage` a cada lote bem-sucedido e o
+     * descartava ao lançar. O dado sempre existiu — faltava como carregá-lo
+     * até a liquidação.
+     */
+    readonly partialUsage: ClassifierUsage | null = null,
+  ) { /* ... */ }
+}
+```
+
+**O `CostRecorder` deixa de escrever no contador.** Volta a ser o que o nome
+diz: observabilidade. Dois componentes escrevendo na mesma chave, um deles
+recalculando o que o outro cobrou, foi o arranjo que escondeu os defeitos.
+
+### Fluxo, agora com o caminho de falha
+
+```
+authorize(est)              [INCR reserva]   recusa → 413 / 503
+   │
+   ├── classify() OK        → settle(est, usoCompleto)   [ajusta ao real]
+   ├── classify() falha
+   │      com lote pago     → settle(est, usoParcial)    [devolve o não gasto]
+   │      sem lote pago     → settle(est, null)          [devolve integral]
+   └── qualquer caminho     → o `finally` garante a liquidação
+```
+
+O caso de uso envolve as etapas pagas em `try/finally`. A invariante é
+testável: **autorizou, liquidou.**
 
 ### `RedisCostRecorder`
 

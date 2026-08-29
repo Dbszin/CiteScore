@@ -1,6 +1,6 @@
 import type { Analysis } from '../domain/analysis.js';
 import type { Suggestion } from '../domain/classification.js';
-import { analysisError } from '../domain/errors.js';
+import { analysisError, isAnalysisError } from '../domain/errors.js';
 import type { ExtractedContent } from '../domain/extracted-content.js';
 import { assessIndexPage } from '../domain/index-page-guard.js';
 import { buildMethodology } from '../domain/methodology.js';
@@ -8,6 +8,7 @@ import type { Sentence } from '../domain/sentence.js';
 import type { BudgetGuard } from '../ports/budget-guard.js';
 import type {
   ClaimClassifier,
+  ClassificationResult,
   ClassifierUsage,
 } from '../ports/claim-classifier.js';
 import type { Clock } from '../ports/clock.js';
@@ -111,11 +112,41 @@ export function createAnalyzeUrl(
     );
     const budget = await deps.budgetGuard.authorize(estimatedTokens);
     if (!budget.allowed) {
-      throw analysisError('BUDGET_EXCEEDED', undefined, budget.retryAfterSeconds);
+      // As duas recusas são opostas do ponto de vista de quem está na tela:
+      // "este artigo é caro demais" tem saída — tentar um menor —, "a cota do
+      // dia acabou" não tem. Colapsá-las num código só transformaria um
+      // problema resolvível num beco aparente.
+      throw analysisError(
+        budget.reason === 'request_too_expensive'
+          ? 'REQUEST_TOO_EXPENSIVE'
+          : 'BUDGET_EXCEEDED',
+        undefined,
+        budget.retryAfterSeconds,
+      );
     }
 
     // ─── 7. Classificação (paga) ──────────────────────────────────────
-    const classification = await deps.classifier.classify(kept, content);
+    //
+    // A partir daqui existe uma RESERVA em aberto, e ela precisa ser fechada
+    // em qualquer desfecho (ADR-009). Antes disso não existia liquidação: uma
+    // falha do classificador deixava a pré-cobrança presa por 48h, e uma
+    // sequência de falhas esgotava o teto sem ter gasto um centavo — a defesa
+    // de custo virava negação de serviço.
+    let classification: ClassificationResult;
+    try {
+      classification = await deps.classifier.classify(kept, content);
+    } catch (cause) {
+      // O classificador sabe quanto já foi pago quando falha no meio dos
+      // lotes: devolve-se só o que NÃO foi gasto. Devolver a estimativa
+      // inteira zeraria o contador sobre dinheiro real — o furo oposto.
+      await deps.budgetGuard.settle(
+        estimatedTokens,
+        isAnalysisError(cause) ? cause.partialUsage : null,
+      );
+      // O erro original sobe intacto: um problema de contabilidade não pode
+      // mascarar a causa que o usuário e o log precisam ver.
+      throw cause;
+    }
 
     // ─── 8. Score ─────────────────────────────────────────────────────
     const { outcome, breakdown } = computeScore(
@@ -150,8 +181,12 @@ export function createAnalyzeUrl(
       }
     }
 
-    // ─── 10. Registro de custo ────────────────────────────────────────
+    // ─── 10. Liquidação e registro de custo ───────────────────────────
+    // Fecha a reserva com o uso REAL. O guard reproduz o que cobrou a partir
+    // do mesmo `estimatedTokens`, então o ajuste é exato.
     const totalUsage = mergeUsage(classification.usage, suggestionUsage);
+    await deps.budgetGuard.settle(estimatedTokens, totalUsage);
+
     if (totalUsage !== null) {
       await deps.costRecorder.record(totalUsage, deps.config.model);
     }

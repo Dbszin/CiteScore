@@ -245,6 +245,67 @@ describe('ClaudeClassifier — respostas ruins', () => {
     );
   });
 
+  /**
+   * A Anthropic COBRA os tokens de entrada de uma recusa. Se o uso do lote
+   * recusado não subir junto com o erro, a liquidação devolve a reserva sobre
+   * dinheiro que foi gasto — o furo que a ADR-009 fechou, por outra porta.
+   *
+   * E `CLASSIFIER_REFUSED` é acionável por quem envia o conteúdo: cada
+   * tentativa que provoque recusa gastaria de verdade sem aparecer no
+   * contador.
+   */
+  it('a recusa carrega o uso do lote que JÁ FOI PAGO', async () => {
+    const { client } = stubClient(() => ({
+      stop_reason: 'refusal',
+      parsed_output: null,
+      usage: { input_tokens: 2_000, output_tokens: 15 },
+    }));
+
+    let capturado: AnalysisError | null = null;
+    await new ClaudeClassifier(client, OPTIONS)
+      .classify(sentences(1), content())
+      .catch((error: unknown) => {
+        capturado = error as AnalysisError;
+      });
+
+    const erro = capturado as AnalysisError | null;
+    expect(erro?.code).toBe('CLASSIFIER_REFUSED');
+    // `null` aqui significaria "nada foi gasto", e a reserva voltaria integral.
+    expect(erro?.partialUsage).not.toBeNull();
+    expect(erro?.partialUsage?.inputTokens).toBe(2_000);
+    expect(erro?.partialUsage?.outputTokens).toBe(15);
+  });
+
+  it('a recusa no SEGUNDO lote soma o primeiro e o recusado', async () => {
+    // 2 sentenças com lote de 1: duas chamadas. A primeira passa, a segunda
+    // recusa. O uso reportado precisa conter as duas.
+    const { client } = stubClient((chamada) =>
+      chamada === 1
+        ? {
+            stop_reason: 'end_turn',
+            parsed_output: { items: [{ id: 0, category: 'SOURCED', confidence: 1 }] },
+            usage: { input_tokens: 1_000, output_tokens: 10 },
+          }
+        : {
+            stop_reason: 'refusal',
+            parsed_output: null,
+            usage: { input_tokens: 900, output_tokens: 5 },
+          },
+    );
+
+    let capturado: AnalysisError | null = null;
+    await new ClaudeClassifier(client, { ...OPTIONS, maxSentencesPerCall: 1 })
+      .classify(sentences(2), content())
+      .catch((error: unknown) => {
+        capturado = error as AnalysisError;
+      });
+
+    const erro = capturado as AnalysisError | null;
+    expect(erro?.code).toBe('CLASSIFIER_REFUSED');
+    expect(erro?.partialUsage?.inputTokens).toBe(1_900);
+    expect(erro?.partialUsage?.outputTokens).toBe(15);
+  });
+
   it('checa a recusa ANTES de olhar o conteúdo', async () => {
     // parsed_output válido junto com refusal: a recusa tem precedência.
     const { client } = stubClient(() => ({

@@ -26,6 +26,15 @@ export class UnlimitedBudgetGuard implements BudgetGuard {
       retryAfterSeconds: null,
     };
   }
+
+  /**
+   * No-op, e isso e correto: este guard nao mantem contador nenhum, entao nao
+   * ha reserva para liquidar. Satisfazer o contrato com nada a fazer e
+   * diferente de ignorar o contrato.
+   */
+  async settle(): Promise<void> {
+    // Nada a devolver.
+  }
 }
 
 /** Registrador em memoria, para inspecionar custo em teste e calibracao. */
