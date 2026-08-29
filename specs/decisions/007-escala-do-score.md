@@ -94,3 +94,125 @@ O terceiro caminho merece destaque porque é o mais barato e talvez o mais hones
 - Adia uma decisão que afeta a percepção do produto por quem o usar.
 
 **Aceito conscientemente:** é melhor um número comprimido e honesto agora do que uma normalização inventada que pareça calibrada sem ser.
+
+---
+
+# EMENDA — 2026-08-29: a base de evidência desta ADR era instável
+
+## O que aconteceu
+
+O classificador **nunca definiu `temperature`**. Usava o default do provedor,
+1.0 — amostragem máxima. Todos os números da tabela acima foram colhidos assim.
+
+Com `temperature: 0`, o artigo do Moz foi medido seis vezes:
+
+| | S | U | O | Score |
+|---|---|---|---|---|
+| Registrado nesta ADR | 19 | 40 | 41 | **24** |
+| Medido agora (5 de 6 execuções) | 12 | 69 | 17 | **13** |
+
+Não é oscilação em torno de um valor: é outra leitura do texto. **41 sentenças
+classificadas como opinião viraram 17.** As que saíram de `OPINION` foram para
+`UNSOURCED`, e isso derruba os dois termos da fórmula ao mesmo tempo — `FD`
+cai e `GAP` sobe.
+
+Ferramenta permanente: `scripts/reprodutibilidade.ts`.
+
+## Consequência desconfortável
+
+**Os três artigos da tabela acima não são medição — são amostragem.** O
+agregado de 331 sentenças, os perfis por tipo de artigo, a conclusão de que "a
+classificação parece boa": tudo isso foi calculado sobre dados que não se
+reproduzem.
+
+A conclusão da ADR — *a régua não discrimina* — pode continuar certa. Mas a
+evidência que a sustentava caiu, e hoje **existe exatamente um ponto de dado
+confiável**: Moz = 13.
+
+Vale notar que o diagnóstico piora, não melhora: o artigo escolhido como modelo
+de bom conteúdo SEO tira **13**, não 24.
+
+## Reprodutibilidade: melhor, não resolvida
+
+Cinco das seis execuções deram 13. Uma deu 21 — e foi também a mais barata
+(US$ 0,0135 contra US$ 0,0156), ou seja, produziu menos tokens de saída para as
+mesmas 100 sentenças. Há diferença real na resposta, não só no número final.
+
+Seis amostras não caracterizam isso. **Uma em seis análises devolvendo um
+número 8 pontos diferente é significativo para um produto que mostra um número.**
+
+## Decisão
+
+### 1. O número de 0 a 100 deixa de ser a figura principal
+
+E não porque escolhemos uma forma melhor — porque sabemos que **esta** está
+errada, por razões que independem da distribuição:
+
+- Comunica precisão de unidade que a medição não tem
+- Lê-se como nota escolar: "13" sugere conteúdo ruim, quando 13 pode ser o
+  normal do formato
+- Não acrescenta informação ao breakdown; só embrulha três números em um,
+  perdendo o que é acionável
+
+### 2. O breakdown passa a ser a figura principal
+
+*"12% das suas afirmações têm fonte, 69% não têm"* é a medição de verdade. Não
+precisa de calibração, não afirma precisão que não existe, e diz ao usuário
+exatamente o que mudar. É também o que a [ADR-004](004-honestidade-como-contrato.md)
+já exigia ao lado do score — a mudança é de hierarquia, não de conteúdo.
+
+### 3. A forma final do composto fica ADIADA, e isto é deliberado
+
+Faixa nomeada, percentil ou remoção: **nenhuma dessas escolhas é possível com
+um ponto de dado.** Qualquer limiar de faixa exige conhecer a distribuição, e a
+distribuição que tínhamos era ruído.
+
+O que destrava: rodar o corpus com `temperature: 0`. Barato e definido —
+`scripts/reprodutibilidade.ts` e `scripts/calibrate.ts` já existem. Os artigos
+grandes custam ~US$ 0,10 cada, então o corpus completo fica em torno de
+US$ 0,40.
+
+**Decidir a forma agora, sem distribuição, repetiria exatamente o erro que criou
+este problema:** a ADR-003 escolheu pesos "como ponto de partida" e eles viraram
+o produto.
+
+## O que sai para o Designer
+
+**Pode desenhar, e não depende de nada pendente:**
+- Layout, tipografia, sistema de cores, responsividade
+- A tela de entrada, o estado de carregamento, os estados de erro
+- **O breakdown das três categorias como figura principal da tela**
+- O texto destacado sentença a sentença — o recurso mais acionável do produto
+- A ressalva de metodologia (ADR-004), que é contrato
+
+**NÃO pode:**
+- Tratar o composto de 0 a 100 como headline
+- Apresentá-lo como nota, medalha, semáforo ou qualquer coisa que sugira
+  aprovação/reprovação
+- Assumir uma escala de faixas — ela não existe ainda
+- Desenhar comparação "antes e depois" sobre o composto: com 1 em 6 execuções
+  divergindo 8 pontos, a comparação mostraria ruído como progresso
+
+**Deve prever:** um lugar secundário para o composto, cuja forma final será
+definida quando a distribuição for medida. Desenhe o espaço, não o número.
+
+## Contrato
+
+`ScoreOutcome` **não muda agora**. O campo `score` continua no payload — ele é
+a computação, e removê-lo antes de saber o que o substitui perderia informação
+sem ganhar nada.
+
+O que muda é a regra da ADR-004: o número **não pode ser apresentado como
+figura principal**, e o breakdown deixa de ser acompanhamento para ser o
+resultado. Quando a distribuição existir, o contrato provavelmente ganha um
+campo derivado — e aí sim isso vira mudança de tipo.
+
+## Trabalho que isto gera
+
+- [ ] Rodar o corpus completo com `temperature: 0` (~US$ 0,40) e obter a
+      distribuição real
+- [ ] Investigar a execução divergente: menos tokens de saída para o mesmo
+      lote sugere resposta diferente, não só número diferente
+- [ ] Reavaliar os pesos 0,6 / 0,4 **depois** da distribuição, nunca antes
+- [ ] `docs/` e `context-resume.md` citam os números antigos (17, 23, 24) como
+      se fossem medição — precisam da ressalva
