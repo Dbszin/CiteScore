@@ -1,0 +1,76 @@
+id: 003-hardening-deploy
+title: Hardening para deploy público
+status: active
+created: 2026-08-28
+updated: 2026-08-28
+author: "@Dbszin"
+type: feature
+priority: P0
+
+summary: >-
+  Remove os três bloqueadores que impedem o deploy público: rate limiter e
+  budget guard fora do processo (Upstash Redis), e o fechamento da janela de
+  TOCTOU / DNS rebinding no fetcher. Reconcilia também as divergências entre a
+  spec de proteção de custo e o código publicado.
+
+blocks:
+  - Deploy na Vercel
+  - Divulgação pública do produto
+
+decisions:
+  - specs/decisions/008-validacao-no-caminho-de-conexao.md
+  - specs/decisions/001-arquitetura-hexagonal.md
+  - specs/decisions/005-modelo-llm-e-custo.md
+
+depends_on:
+  - id: CRED-1
+    what: "REDIS_URL e REDIS_TOKEN do Upstash"
+    owner: usuário
+    blocks: "verificação real e deploy — NÃO bloqueia implementação nem testes"
+    note: >-
+      O design isola o cliente Redis atrás de uma interface estreita, então a
+      lógica inteira é implementável e testável com cliente falso antes de as
+      credenciais existirem.
+
+breaking_changes:
+  - what: "BUDGET_EXCEEDED muda de 429 para 503"
+    why: >-
+      O teto diário é global, não do cliente. Dizer 'você fez requisições
+      demais' a quem fez uma é factualmente errado.
+  - what: "Dois códigos de erro novos: REQUEST_TOO_EXPENSIVE e GUARD_UNAVAILABLE"
+    why: >-
+      'Este artigo é grande demais' é acionável pelo usuário; 'a cota do dia
+      acabou' não é. Colapsar os dois em um código apaga a diferença.
+  - what: "DAILY_TOKEN_BUDGET e MAX_TOKENS_PER_REQUEST saem; entram DAILY_BUDGET_USD e MAX_REQUEST_BUDGET_USD"
+    why: >-
+      Contar só tokens de ENTRADA subestima o gasto em 73%: a saída domina o
+      custo. O teto foi aprovado em dólares e precisa ser expresso em dólares.
+
+subagents:
+  approved: true
+  note: >-
+    Paralelizável SOMENTE depois da FASE 1 (contratos de erro e configuração),
+    que os dois componentes compartilham. A integração no container é
+    sequencial e vem depois de ambos.
+  components:
+    - name: fetch-sem-toctou
+      scope: "Validação no caminho de conexão, conforme ADR-008"
+      files: "src/adapters/fetch/**, tests/adapters/fetch/**"
+      constraints: >-
+        Não tocar em src/adapters/ratelimit/**, src/adapters/budget/**,
+        src/adapters/redis/**, nem em container.ts. NÃO alterar
+        private-address.ts — a lógica pura já está correta.
+    - name: guardas-redis
+      scope: "RedisRateLimiter, RedisBudgetGuard, RedisCostRecorder e o cliente"
+      files: "src/adapters/redis/**, src/adapters/ratelimit/**, src/adapters/budget/**, tests/adapters/redis/**"
+      constraints: >-
+        Não tocar em src/adapters/fetch/** nem em container.ts.
+
+open_questions:
+  - id: OQ-4
+    question: >-
+      A Rota A da ADR-008 (dispatcher do undici) tem efeito real sob o fetch do
+      Next? Só a execução responde.
+    owner: engineer
+    blocks: "escolha entre Rota A e Rota B"
+    default: "Rota A, com prova em execução obrigatória antes de aceitar"
