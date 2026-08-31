@@ -3,13 +3,13 @@ import { JSDOM } from 'jsdom';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * Trava a cascata do highlight inline com um motor de CSS de verdade.
+ * Trava a cascata do destaque inline com um motor de CSS de verdade.
  *
  * Este teste existe porque um bug real passou por revisão de código: a regra
- * `.manuscript mark { background: transparent }` tem especificidade (0,1,1) e vencia
- * as regras `.cat-*`, de (0,1,0). Todo destaque no texto ficava sem fundo,
- * enquanto a LEGENDA — que usa outro seletor e não colidia — mostrava as
- * cores. A tela não parecia quebrada; parecia uma decisão de design.
+ * `.manuscript mark { background: transparent }` tem especificidade (0,1,1) e
+ * vencia as regras `.cat-*`, de (0,1,0). Todo destaque no texto ficava sem
+ * fundo, enquanto a LEGENDA — que usa outro seletor e não colidia — mostrava
+ * as cores. A tela não parecia quebrada; parecia uma decisão de design.
  *
  * Ler CSS foi como o bug entrou, então a verificação não pode ser leitura.
  *
@@ -39,22 +39,33 @@ let win: JSDOM['window'];
 
 beforeAll(() => {
   const css = readFileSync('src/app/globals.css', 'utf8');
+
+  // O destaque no texto: `mark.cat-*` dentro da folha, como em `analyzer.tsx`.
   const marks = CATEGORIES.map(
     (category) =>
-      `<mark class="cat-${category}" id="mark-${category}">texto</mark>`,
+      `<span class="pop-wrap"><mark class="cat-${category}" id="mark-${category}">` +
+      `<button class="sentence" type="button">texto</button></mark></span>`,
   ).join('');
+
+  /*
+   * A legenda na direção "Precisão Escura" NÃO usa as tintas: ela vive na
+   * interface escura, onde as tintas de categoria não têm contraste. Ela usa
+   * amostra de TRAÇO (`.stroke-*`), e é a correspondência entre esse traço e o
+   * sublinhado do texto que precisa ser travada agora.
+   */
   const legend = CATEGORIES.map(
     (category) =>
-      `<span class="cat-${category}" id="legend-${category}">rótulo</span>`,
+      `<span class="legend-item"><span class="stroke stroke-${category}" ` +
+      `id="stroke-${category}"></span>rótulo</span>`,
   ).join('');
 
   const dom = new JSDOM(
     `<!doctype html><html><head><style>${css}</style></head><body>` +
       `<div class="legend">${legend}</div>` +
-      `<div class="manuscript">${marks}` +
+      `<div class="sheet"><div class="sheet-inner">${marks}` +
       `<span class="unanalyzed" id="unanalyzed">fora do limite</span>` +
       `<span class="excluded" id="excluded">título</span>` +
-      `</div></body></html>`,
+      `</div></div></body></html>`,
   );
   win = dom.window;
 });
@@ -69,26 +80,15 @@ function backgroundOf(id: string): string {
   return styleOf(id).background;
 }
 
-describe('Cascata do highlight inline', () => {
+describe('Cascata do destaque inline', () => {
   it.each(CATEGORIES)(
-    'o fundo de cat-%s sobrevive dentro de .text',
+    'o fundo de cat-%s sobrevive dentro da folha',
     (category) => {
       const background = backgroundOf(`mark-${category}`);
 
       // O bug produzia exatamente 'rgba(0, 0, 0, 0)' aqui.
       expect(background).not.toBe('rgba(0, 0, 0, 0)');
       expect(background).toContain('var(--');
-    },
-  );
-
-  it.each(CATEGORIES)(
-    'a legenda e o texto usam a MESMA cor para cat-%s',
-    (category) => {
-      // A divergência entre os dois é o sintoma que tornava o bug enganoso:
-      // a legenda prometia um código visual que o texto não entregava.
-      expect(backgroundOf(`mark-${category}`)).toBe(
-        backgroundOf(`legend-${category}`),
-      );
     },
   );
 
@@ -99,21 +99,47 @@ describe('Cascata do highlight inline', () => {
     expect(new Set(backgrounds).size).toBe(CATEGORIES.length);
   });
 
+  it('o botão interno não rouba o fundo do destaque', () => {
+    // O texto da sentença é um `<button>` para ter teclado de graça. Se ele
+    // ganhasse fundo próprio, cobriria o destaque de dentro para fora — mesmo
+    // sintoma do bug original, causa diferente.
+    const css = readFileSync('src/app/globals.css', 'utf8');
+    const bloco = /\.sentence\s*\{([^}]*)\}/u.exec(css);
+    expect(bloco).not.toBeNull();
+    expect(bloco?.[1]).toContain('background: none');
+  });
+
+  it('o botão interno quebra entre linhas', () => {
+    // `<button>` é inline-block por padrão, e inline-block NÃO quebra. Cada
+    // sentença tem dezenas de palavras: sem `display: inline` uma única frase
+    // estouraria a largura da folha.
+    const css = readFileSync('src/app/globals.css', 'utf8');
+    const bloco = /\.sentence\s*\{([^}]*)\}/u.exec(css);
+    expect(bloco?.[1]).toContain('display: inline');
+  });
+
   it('`unanalyzed` e `excluded` não renderizam idênticos', () => {
     // São ausências semanticamente diferentes: uma é "não coube no limite",
-    // a outra é "não é analisável". Parecer a mesma coisa atribui a uma delas
-    // uma razão falsa.
-    expect(styleOf('unanalyzed').borderBottomStyle).toBe('dashed');
-    expect(styleOf('excluded').borderBottomStyle).toBe('');
+    // a outra é "não é analisável". Parecer a mesma coisa atribui à primeira
+    // uma razão falsa — o leitor conclui que o sistema julgou, quando ele nem
+    // olhou.
+    //
+    // O canal aqui é FUNDO, e não traço, porque solid/dashed/dotted já
+    // pertencem às três categorias e reusá-los criaria colisão visual.
+    const foraDoLimite = backgroundOf('unanalyzed');
+    const naoAnalisavel = backgroundOf('excluded');
+
+    expect(foraDoLimite).not.toBe(naoAnalisavel);
+    expect(foraDoLimite).not.toBe('');
   });
 });
 
 /**
- * Cor NUNCA é o único canal (design-visual.md § 3).
+ * Cor NUNCA é o único canal (`design-visual-2.md` § 3.5).
  *
- * A versão anterior distinguia as três categorias SÓ por cor — invisível para
- * quem não distingue cor e em impressão preto e branco. Cada uma tem agora um
- * traço próprio no sublinhado, e é isso que estes testes travam.
+ * Cada categoria tem traço próprio no sublinhado, distinguível em escala de
+ * cinza, em qualquer deficiência de visão de cor e em impressão preto e
+ * branco.
  */
 describe('Traço distinto por categoria — acessibilidade multicanal', () => {
   it('as três categorias têm estilos de linha DIFERENTES entre si', () => {
@@ -128,16 +154,20 @@ describe('Traço distinto por categoria — acessibilidade multicanal', () => {
 
   it('todas têm espessura de traço visível', () => {
     for (const categoria of CATEGORIES) {
-      expect(styleOf(`mark-${categoria}`).borderBottomWidth, categoria).toBe('2px');
+      expect(styleOf(`mark-${categoria}`).borderBottomWidth, categoria).toBe(
+        '2px',
+      );
     }
   });
 
-  it('as amostras da legenda usam o MESMO traço do texto', () => {
+  it('a amostra da legenda usa o MESMO traço do texto', () => {
     // A legenda prometendo um código que o texto não entrega foi exatamente
-    // o sintoma que tornou o bug anterior enganoso.
+    // o sintoma que tornou o bug anterior enganoso. A amostra desenha o traço
+    // em `border-top` (é uma linha de 24px, sem conteúdo), e o texto em
+    // `border-bottom` — o que precisa coincidir é o ESTILO.
     for (const categoria of CATEGORIES) {
       expect(
-        styleOf(`legend-${categoria}`).borderBottomStyle,
+        styleOf(`stroke-${categoria}`).borderTopStyle,
         categoria,
       ).toBe(styleOf(`mark-${categoria}`).borderBottomStyle);
     }

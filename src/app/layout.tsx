@@ -1,44 +1,61 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { IBM_Plex_Mono, IBM_Plex_Sans, IBM_Plex_Serif } from 'next/font/google';
+import { Archivo, JetBrains_Mono, Source_Serif_4 } from 'next/font/google';
 
 import './globals.css';
 
 /**
- * IBM Plex, três cortes (design-visual.md § 4).
+ * As três famílias de `design-visual-2.md` § 4, via `next/font/google`:
+ * auto-hospedadas, sem requisição a terceiro, sem CLS, ZERO dependência
+ * instalada.
  *
- * `next/font` já vem no Next: auto-hospeda os arquivos, elimina requisição a
- * terceiros e não causa CLS. Nenhum pacote instalado.
+ * Todas as três são variáveis, então `weight` é omitido de propósito — um
+ * arquivo por família cobre 400, 500 e 600, que é o orçamento que a spec pede,
+ * por menos bytes que três cortes estáticos.
  *
- * Plex e não Inter porque foi desenhada para documentação técnica e tem corte
- * serifado de verdade — que é o que sustenta a metáfora de prova tipográfica.
- * Só os pesos que a spec lista.
+ * IBM Plex saiu inteiro. Archivo em vez de Inter porque é grotesca de formas
+ * estreitas, desenhada para funcionar com tracking negativo em tamanho grande.
+ * Source Serif no manuscrito e sans na interface é semântica, não enfeite:
+ * distingue o texto do usuário da voz do sistema.
  */
-const sans = IBM_Plex_Sans({
+const sans = Archivo({
   subsets: ['latin'],
-  weight: ['400', '600'],
   variable: '--font-sans',
   display: 'swap',
 });
 
-const serif = IBM_Plex_Serif({
+const serif = Source_Serif_4({
   subsets: ['latin'],
-  weight: ['400'],
   variable: '--font-serif',
   display: 'swap',
 });
 
-const mono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '500'],
   variable: '--font-mono',
   display: 'swap',
 });
 
+/*
+ * `metadataBase` existe para a OG image resolver URL ABSOLUTA. Sem ele o Next
+ * cai em `http://localhost:3000`, e o card no LinkedIn quebraria justamente
+ * no ambiente em que ele importa.
+ *
+ * `VERCEL_PROJECT_PRODUCTION_URL` vem preenchida no deploy; local cai no
+ * localhost, que e' o certo para local.
+ */
+const base =
+  process.env['VERCEL_PROJECT_PRODUCTION_URL'] !== undefined
+    ? `https://${process.env['VERCEL_PROJECT_PRODUCTION_URL']}`
+    : 'http://localhost:3000';
+
 export const metadata: Metadata = {
-  title: 'CiteScore',
+  metadataBase: new URL(base),
+  title: 'CiteScore — análise de densidade factual',
   description:
-    'Quanto de um artigo são afirmações sustentadas por dado ou fonte.',
+    'Cada afirmação do seu artigo, classificada em três: tem dado ou fonte, ' +
+    'não tem, ou é opinião. Densidade de fonte é uma das alavancas mais ' +
+    'fortes de GEO — e é a que dá para medir frase a frase.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

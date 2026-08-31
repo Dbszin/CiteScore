@@ -579,3 +579,135 @@ Critério de teste conforme `conventions.md` § TDD Skip Criteria. Tudo aqui tem
 - [ ] Mover `specs/changes/001-analisador-densidade-factual/` para `specs/archive/2026-XX-XX-001-analisador-densidade-factual/`
 - [ ] `.spec.yaml` → `status: completed`
 - [ ] `docs/long-term-plan.md` atualizado com o estado real dos marcos
+
+
+## Direção visual 2 — "Precisão Escura" (implementada 2026-08-31)
+
+Implementa `specs/ui-relatorio/design-visual-2.md`, que supersede
+`design-visual.md`.
+
+- [x] `globals.css`: paleta única escura + a folha clara, sem bloco de tema claro
+- [x] `layout.tsx`: Archivo, Source Serif 4 e JetBrains Mono via `next/font`
+- [x] `page.tsx`: as 8 seções (topbar, hero, como funciona, três lápis, o que
+      não medimos, limites, rodapé)
+- [x] `analyzer.tsx`: barra de método, breakdown, folha, ficha técnica,
+      `scrollIntoView` no resultado
+- [x] `report-model.ts`: `Segment.classified` ganha `confidence` e `signals`
+- [x] `icons.tsx`: os 7 ícones SVG inline
+- [x] `opengraph-image.tsx`: o card do LinkedIn
+- [x] Contraste calculado e travado em teste (28 pares de corpo + 10 de
+      componente)
+- [x] 9 sabotagens aplicadas e detectadas pelos testes
+
+### Desvios da spec, decididos na implementação
+
+- **`--line-field` é token novo, não previsto na spec.** Ver a nota de
+  implementação na § 3.4 do `design-visual-2.md`.
+- **A OG image desenha os três traços como SEGMENTOS, não com
+  `border-style`.** O Satori (renderizador do `next/og`) aceita só `solid` e
+  `dashed`; `dotted` reprova o build. Como o pontilhado é o canal
+  não-cromático da terceira categoria, perdê-lo não era opção.
+- **`.unanalyzed` distingue-se de `.excluded` por FUNDO, não por traço.** A
+  spec não especificou o canal. Traço não servia: solid/dashed/dotted já
+  pertencem às três categorias.
+- **`metadataBase` acrescentado** ao `layout.tsx`, não previsto na spec. Sem
+  ele o Next resolve a OG image contra `localhost:3000` e o card quebraria em
+  produção — que é o único ambiente onde ele importa.
+
+### Débito registrado, NÃO feito nesta rodada
+
+- [ ] **O nome do autor no rodapé é o placeholder `[NOME DO AUTOR]`.** Precisa
+      do usuário; o código não inventa.
+- [ ] 🔴 **A rota `/metodologia` NUNCA EXISTIU, e a ADR-004 item 4 exige que a
+      metodologia esteja a um clique do resultado.** O `METHODOLOGY_URL` tinha
+      default `/metodologia`, então o link "Ler o método" no painel de
+      resultado dava 404. Achado nesta rodada, mas o defeito é anterior a ela.
+      - Mitigado: o default virou `/#metodo`, a seção da página, que existe.
+      - **NÃO resolvido:** a seção não lista os sinais do pré-filtro nem a
+        fórmula do score. A ADR-004 pede "quais sinais, como o score é
+        calculado, o que não foi medido" — só o terceiro está lá.
+      - **Ação do usuário:** `.env.local` tem `METHODOLOGY_URL=/metodologia`
+        escrito à mão e sobrepõe o default. Precisa virar `/#metodo`, senão o
+        404 continua em local e em qualquer deploy que copie esse arquivo.
+      - Pendente de decisão: página `/metodologia` dedicada é rota nova e não
+        está em nenhuma spec. Precisa do Architect antes do Engineer.
+- [x] O link da seção "O que não medimos" aponta para `specs/decisions/` no
+      repositório. O anterior mirava `#metodologia` num README que não existe.
+- [ ] **Drawer mobile não implementado.** A spec § 12 o especifica; a topbar
+      hoje mostra os três links direto, o que cabe em 390px mas fica apertado.
+      Não é bloqueador.
+- [ ] **Nenhum teste cobre a posição do disclaimer na tela.** Ele é o primeiro
+      filho do painel por construção, e o `scrollIntoView` traz o painel ao
+      topo — mas isso é verificável só em navegador. A ADR-004 protege o
+      CONTEÚDO por teste de contrato; a POSIÇÃO segue sem oráculo.
+- [ ] **`scrollIntoView` e `matchMedia` não são exercitados por teste.** O
+      ambiente do Vitest é `node`, sem DOM. Verificação é visual.
+
+
+## 🔴 ACHADO MEDIDO 2026-08-31 — landing pages passam e são medidas nas sobras
+
+Ferramenta: `scripts/medir-landing-pages.ts` (extração + segmentação + guarda,
+sem LLM, custo zero).
+
+```
+página      tipo     palavras  sent  analis   razão  veredito
+linear      lp            824   163      30   0.184  BARRADA pela guarda
+vercel      lp             81    21       3   0.143  BARRADA pela guarda
+stripe      lp            798    94      38   0.404  passaria para o LLM
+resend      lp            568    80      37   0.463  passaria para o LLM
+plausible   lp            330    33      22   0.667  passaria para o LLM
+rdstation   lp            431    63      25   0.397  passaria para o LLM
+moz-artigo  artigo       1910   175     100   0.571  passaria para o LLM
+```
+
+Motivos de exclusão:
+
+```
+linear       heading:131 short:2
+vercel       heading:18
+stripe       heading:49 short:7
+resend       heading:41 short:2
+plausible    heading:6 short:5
+rdstation    heading:37 short:1
+moz-artigo   heading:68 list_item:4 short:3
+```
+
+### O que os números dizem
+
+1. **A guarda de índice NÃO separa LP de artigo, e nunca foi feita para isso.**
+   Ela foi calibrada sobre 7 fixtures em que não havia uma única LP. A Plausible
+   tem razão 0,667, MAIOR que o artigo da Moz (0,571).
+
+2. **4 de 6 LPs passariam para o LLM** e receberiam score.
+
+3. **`heading` domina a exclusão em toda LP.** E numa LP a headline É a
+   afirmação: "2x mais rápido", "reduza custos em 40%". A regra atual
+   ("sem pontuação terminal e curto = título") descarta exatamente a parte
+   densa em afirmação.
+
+4. **Consequência:** a LP não é recusada, é medida nas SOBRAS — parágrafos de
+   rodapé e texto corrido. O número sai plausível e é sem sentido. É o mesmo
+   modo de falha que motivou a guarda de índice ("lixo plausível, não erro, que
+   é pior porque passa"), e a guarda não pega porque a razão fica acima de 0,35.
+
+5. **A Vercel extraiu 81 palavras de toda a home**, contra piso de 60. Passou
+   por um fio na extração e foi barrada depois pela razão — resultado certo por
+   caminho errado.
+
+### O que isto NÃO é
+
+Não é bug de implementação, e não se corrige com limiar. Exige decidir **o que
+conta como afirmação**: hoje é sentença com verbo e pontuação terminal; para LP
+teria que incluir fragmento assertivo. E exige repensar a linha de base, porque
+LP é persuasão por natureza e quase toda daria "95% sem fonte" — a mesma
+compressão de régua que já trava o composto (emenda da ADR-007).
+
+### Ações
+
+- [ ] **Architect:** decidir se LP entra no escopo. Se entrar, é change nova
+      (004), com decisão sobre a unidade de análise e sobre a linha de base.
+- [ ] **Curto prazo, sem depender da decisão acima:** a tela declara "artigos
+      públicos" na seção Limites, o que é vago. Se uma LP passa e é medida
+      parcialmente, o usuário não é avisado. Considerar aviso quando a razão de
+      analisáveis for baixa mas acima do limiar da guarda — a informação já
+      existe em `IndexPageAssessment.analyzableRatio` e não é exibida.

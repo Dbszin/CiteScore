@@ -137,6 +137,15 @@ export type Segment =
       readonly text: string;
       readonly category: ClaimCategory;
       readonly label: string;
+      /**
+       * 0..1. Repasse de `Classification`, para o popover de sentença.
+       *
+       * Não é computação nova: o dado sempre existiu no payload e nunca
+       * chegava à tela. `design-visual-2.md` § 9.3 o exibe.
+       */
+      readonly confidence: number;
+      /** Sinais achados pelo pré-filtro. Também repasse, também inéditos na tela. */
+      readonly signals: readonly string[];
     }
   | {
       readonly kind: 'unanalyzed';
@@ -153,18 +162,20 @@ export type Segment =
 
 export function buildSegments(analysis: Analysis): readonly Segment[] {
   const byId = new Map(
-    analysis.classifications.map((item) => [item.sentenceId, item.category]),
+    analysis.classifications.map((item) => [item.sentenceId, item]),
   );
 
   return analysis.sentences.map((sentence): Segment => {
-    const category = byId.get(sentence.id);
-    if (category !== undefined) {
+    const found = byId.get(sentence.id);
+    if (found !== undefined) {
       return {
         kind: 'classified',
         id: sentence.id,
         text: sentence.text,
-        category,
-        label: CATEGORY_LABEL[category],
+        category: found.category,
+        label: CATEGORY_LABEL[found.category],
+        confidence: found.confidence,
+        signals: found.signals,
       };
     }
 
@@ -271,10 +282,16 @@ export function buildRecord(analysis: Analysis): readonly RecordRow[] {
     const densidade = Math.round(analysis.breakdown.factualDensity * 100);
     rows.push({
       key: 'medição',
+      /*
+       * A ressalva viaja na MESMA linha do composto, porque a linha pode ser
+       * lida isolada num screenshot — que é exatamente o modo de falha que a
+       * ADR-004 descreve para ressalva que vive longe do número.
+       */
       value: [
         `densidade factual ${densidade}%`,
-        `composto ${analysis.outcome.score}`,
+        `composto ${analysis.outcome.score}/100`,
         `score v${analysis.scoreVersion}`,
+        'escala não calibrada',
       ].join(' · '),
     });
   }

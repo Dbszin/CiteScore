@@ -1,5 +1,17 @@
 # Direção visual: CiteScore
 
+> ## ⛔ SUPERSEDIDO por [`design-visual-2.md`](design-visual-2.md) — 2026-08-31
+>
+> Esta direção ("manuscrito revisado") foi implementada e comitada em `173b87c`.
+> O usuário a viu rodando e reprovou: *"não pode ser esse 'simples' que está
+> atualmente"*. O brief que a originou pedia credibilidade sóbria; sóbrio demais
+> leu como inacabado, e o produto agora precisa parecer vendável.
+>
+> **Não implemente a partir deste documento.** Ele fica no repositório porque
+> registra o que foi medido aqui e ainda vale: os contrastes calculados, o
+> segundo canal não-cromático nas categorias, e a estrutura de CSS que torna o
+> bug de especificidade do `mark` impossível. A direção 2 herda as três.
+
 > Este documento define **como a tela parece e se comporta**. Os requisitos que
 > ela precisa garantir estão em [`spec.md`](spec.md), e as restrições de
 > contrato vêm da [ADR-004](../../../../decisions/004-honestidade-como-contrato.md)

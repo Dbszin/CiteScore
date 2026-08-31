@@ -1,412 +1,939 @@
 /*
- * CiteScore — prova tipográfica.
+ * CiteScore — Malha e Camadas (variante C)
+ * Implementa `specs/.../ui-relatorio/design-visual-2.md` com o enriquecimento
+ * escolhido pelo usuário depois de ver as três variantes renderizadas.
  *
- * Direção completa em
- * specs/changes/001-.../specs/ui-relatorio/design-visual.md
+ * A pele anterior ("Precisão Escura" chapada) foi reprovada por ser SECA, e o
+ * diagnóstico é que a lista de proibições era longa demais: gradiente, sombra,
+ * glow, imagem, malha, vidro e efeito de cursor, todos banidos ao mesmo tempo,
+ * deixam tipografia como único recurso. Linear e Resend, citados como
+ * referência na spec, TÊM luz ambiente e superfícies com tinta — a spec copiou
+ * a contenção deles e esqueceu a profundidade.
  *
- * A tela é um manuscrito revisado, não um painel. O artigo do usuário ocupa o
- * centro, marcado sentença a sentença. Autoridade vem de tipografia e espaço,
- * não de cartões flutuando com sombra.
+ * O que entra: halo radial, malha de linhas com máscara, painéis translúcidos
+ * com `backdrop-filter`, headline em gradiente.
+ * O que continua banido: sombra projetada, gradiente violeta de SaaS, medidor
+ * circular, semáforo, contador animado.
+ *
+ * ⚠️ CONSEQUÊNCIA DE VERIFICAÇÃO, e ela é a parte séria desta mudança:
+ * painel translúcido sobre fundo variável NÃO tem "um" fundo. O contraste passa
+ * a ser calculado por COMPOSIÇÃO DE CAMADAS, no pior caso — o fundo mais claro
+ * que pode existir sob o texto, que é vazio + halo no pico + linha da malha.
+ * `tests/adapters/ui/contraste.test.ts` compõe com o mesmo modelo do navegador
+ * (`out = a*fg + (1-a)*bg`, em sRGB gama-codificado). Isso não é conferível a
+ * olho, e é por isso que os valores abaixo vêm de cálculo.
  */
 
-/* ─── Tokens ──────────────────────────────────────────────────────────── */
-
 :root {
-  color-scheme: light dark;
-
-  --bg-primary: hsl(40 22% 97%);
-  --bg-surface: hsl(42 30% 99%);
-  --bg-elevated: hsl(42 30% 100%);
-  --bg-sunken: hsl(40 18% 94%);
-
-  --text-primary: hsl(222 20% 14%);
-  --text-secondary: hsl(222 12% 36%);
-  /* 44%, não 52%: a 52% o contraste contra `--bg-sunken` era 3,49:1, abaixo
-     do mínimo de 4,5:1 para corpo — e é este token que pinta a ficha técnica
-     inteira (12px) e as sentenças fora da análise. Valor calculado, não
-     estimado; há teste que recalcula. */
-  --text-muted: hsl(222 9% 44%);
-
-  --accent: hsl(224 58% 42%);
-  --accent-hover: hsl(224 58% 36%);
-  --accent-contrast: hsl(42 30% 99%);
-
-  --border: hsl(38 16% 85%);
-  --border-strong: hsl(38 14% 72%);
-  --focus: hsl(224 80% 52%);
-  --focus-ring: hsl(224 80% 52% / 0.18);
-
-  --error: hsl(4 62% 44%);
-  --error-bg: hsl(4 62% 44% / 0.06);
-  --notice: hsl(38 58% 38%);
-  --notice-bg: hsl(38 58% 38% / 0.08);
+  color-scheme: dark;
 
   /*
-   * As três categorias. Descritivas, não avaliativas: sem verde/amarelo/
-   * vermelho, porque semáforo comunicaria aprovação — exatamente o que a
-   * emenda da ADR-007 proíbe. São três lápis de revisor, de pesos iguais.
+   * --- As camadas de fundo ---
+   * São tokens porque o TESTE precisa compô-las para saber qual é o fundo
+   * efetivo. Se alguém clarear o halo e esquecer o contraste, o teste recompõe
+   * e reprova.
    */
-  --cat-sourced: hsl(186 62% 26%);
-  --cat-sourced-bg: hsl(186 44% 92%);
-  --cat-unsourced: hsl(250 46% 46%);
-  --cat-unsourced-bg: hsl(250 42% 94%);
-  --cat-opinion: hsl(32 66% 34%);
-  --cat-opinion-bg: hsl(32 52% 92%);
+  --void: hsl(214 30% 6%);
+  --halo: hsl(168 80% 46% / 0.15);
+  --mesh: hsl(190 60% 70% / 0.05);
 
+  /* --- Superfícies translúcidas --- */
+  --panel: hsl(210 28% 12% / 0.66);
+  --panel-inset: hsl(212 36% 7% / 0.55);
+  --panel-raised: hsl(208 24% 17% / 0.86);
+
+  /*
+   * --- Tintas ---
+   * `--text-faint` em 59% e `--line-field` em 49% não são escolha estética: são
+   * os menores valores que cruzam o limiar contra o fundo COMPOSTO no pior
+   * caso. Em 58% e 46%, o cálculo dava 4,39:1 e 3,05:1.
+   */
+  --text-bright: hsl(200 25% 96%);
+  --text-body: hsl(205 16% 82%);
+  --text-dim: hsl(205 12% 70%);
+  --text-faint: hsl(205 10% 59%);
+
+  /*
+   * Os dois pontos do gradiente da headline. `--display-to` é o mais escuro e
+   * portanto o pior caso — é ele que o teste mede. A headline vai de 44px a
+   * 72px, então cai no limiar de texto grande (3:1) pela WCAG, e passa com
+   * folga larga.
+   */
+  --display-from: hsl(0 0% 100%);
+  --display-to: hsl(212 22% 74%);
+
+  /* Divisores DECORATIVOS — isentos pela WCAG 1.4.11. */
+  --line: hsl(200 22% 18% / 0.7);
+  --line-bright: hsl(200 24% 28% / 0.8);
+  /* Borda de COMPONENTE — 3:1 exigido, e calculado. */
+  --line-field: hsl(200 20% 49%);
+  /* Quina de luz: é o que dá volume sem sombra projetada. */
+  --sheen: hsl(180 70% 90% / 0.09);
+
+  /*
+   * Acento único, verde-água. Frio e sem valência: não lê como aprovação
+   * (verde puro) nem alarme (vermelho), e este produto é proibido de sugerir
+   * aprovação (emenda da ADR-007).
+   */
+  --accent: hsl(168 76% 64%);
+  --accent-deep: hsl(168 60% 26%);
+  --accent-ink: hsl(180 60% 7%);
+  --focus: hsl(168 90% 70%);
+
+  --warn: hsl(38 88% 64%);
+  --fail: hsl(2 78% 68%);
+
+  /*
+   * --- A FOLHA (clara) ---
+   * Só o texto do usuário vive aqui. É o objeto mais luminoso da tela porque é
+   * o mais importante do produto — e é o que impede a direção de virar "mais um
+   * app escuro". Também resolve a objeção legítima ao dark-only: nenhum
+   * parágrafo longo é lido sobre fundo escuro.
+   */
+  --sheet: hsl(150 14% 96%);
+  --sheet-edge: hsl(150 10% 86%);
+  --sheet-ink: hsl(205 26% 11%);
+  --sheet-dim: hsl(205 8% 42%);
+
+  /*
+   * As três categorias. Tintas escuras sobre a folha clara, NUNCA sobre a
+   * interface — lá elas não têm contraste, e forçá-las é o erro mais provável
+   * desta direção. Na interface, a categoria é representada por TRAÇO.
+   *
+   * Sem verde/amarelo/vermelho: semáforo comunicaria aprovação. São três lápis
+   * de revisor de pesos iguais.
+   */
+  --cat-sourced: hsl(186 68% 24%);
+  --cat-sourced-bg: hsl(186 46% 90%);
+  --cat-unsourced: hsl(250 50% 44%);
+  --cat-unsourced-bg: hsl(250 44% 93%);
+  --cat-opinion: hsl(32 70% 32%);
+  --cat-opinion-bg: hsl(32 54% 90%);
+
+  /* --- Espaço, base 4px --- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --space-20: 80px;
+  --space-28: 112px;
+  --space-36: 144px;
 
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-full: 9999px;
+  --r-xs: 3px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-full: 9999px;
 
-  --elev-line: 0 0 0 1px var(--border);
-  --elev-line-strong: 0 0 0 1px var(--border-strong);
-  --elev-pop: 0 4px 16px hsl(222 20% 14% / 0.1);
+  /* Sombra projetada continua proibida. Volume vem da quina de luz. */
+  --elev-0: none;
+  --elev-inset: inset 0 1px 0 var(--sheen);
 
-  --measure: 68ch;
-  --container: 60rem;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --topbar-h: 56px;
+  --shell: 1120px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-primary: hsl(222 16% 11%);
-    --bg-surface: hsl(222 14% 15%);
-    --bg-elevated: hsl(222 13% 19%);
-    --bg-sunken: hsl(222 18% 9%);
-
-    --text-primary: hsl(40 18% 92%);
-    --text-secondary: hsl(40 10% 68%);
-    /* 53%, não 52%: a 52% o contraste contra `--bg-surface` era 4,40:1,
-       abaixo de AA. Achado pelo teste de contraste, não pela leitura. */
-    --text-muted: hsl(40 8% 53%);
-
-    --accent: hsl(224 70% 68%);
-    --accent-hover: hsl(224 70% 76%);
-    --accent-contrast: hsl(222 20% 12%);
-
-    --border: hsl(222 12% 26%);
-    --border-strong: hsl(222 10% 38%);
-    --focus: hsl(224 90% 70%);
-    --focus-ring: hsl(224 90% 70% / 0.22);
-
-    --error: hsl(4 72% 68%);
-    --error-bg: hsl(4 72% 68% / 0.1);
-    --notice: hsl(38 70% 62%);
-    --notice-bg: hsl(38 70% 62% / 0.1);
-
-    --cat-sourced: hsl(186 58% 62%);
-    --cat-sourced-bg: hsl(186 40% 18%);
-    --cat-unsourced: hsl(250 68% 74%);
-    --cat-unsourced-bg: hsl(250 34% 22%);
-    --cat-opinion: hsl(32 72% 62%);
-    --cat-opinion-bg: hsl(32 42% 19%);
-
-    --elev-pop: 0 4px 16px hsl(0 0% 0% / 0.4);
-  }
-}
-
-/* ─── Base ────────────────────────────────────────────────────────────── */
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  background: var(--void);
+  color: var(--text-body);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 0.9375rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
-h1,
-h2,
-h3 {
-  margin: 0;
-  font-weight: 600;
+/*
+ * Camada 1: o halo, e o grão.
+ *
+ * O grão não é enfeite: gradiente radial amplo em tela de 8 bits mostra
+ * banding, e o ruído o quebra. ~200 bytes inline.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(900px 700px at 18% -6%, var(--halo) 0%, transparent 64%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
 }
 
-h1 {
-  font-size: 1.75rem;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-h2 {
-  font-size: 1.25rem;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-
-h3 {
-  font-size: 0.9375rem;
-  line-height: 1.4;
-  letter-spacing: 0.01em;
-}
-
-p {
-  margin: 0;
-}
-
-a {
-  color: var(--accent);
-  text-underline-offset: 2px;
+/*
+ * Camada 2: a malha técnica, com máscara radial para sumir ao descer.
+ *
+ * A máscara é o que a diferencia de papel milimetrado: a malha existe só no
+ * enquadramento superior, onde dá profundidade, e desaparece antes de competir
+ * com o texto do corpo.
+ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--mesh) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mesh) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(
+    1100px 700px at 26% 0%,
+    #000 0%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(1100px 700px at 26% 0%, #000 0%, transparent 74%);
 }
 
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+  border-radius: var(--r-xs);
 }
 
-/* ─── Estrutura ───────────────────────────────────────────────────────── */
-
-.page {
-  max-width: var(--container);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-4) var(--space-16);
+a {
+  color: var(--accent);
+  text-decoration: none;
 }
 
-.masthead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.tagline {
-  margin-top: var(--space-1);
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-}
-
-.label {
-  font-size: 0.75rem;
-  line-height: 1.3;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-/* ─── Ressalva de metodologia — contrato da ADR-004 ───────────────────── */
-
-.notice-method {
-  margin-top: var(--space-6);
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  box-shadow: var(--elev-line);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.notice-method .label {
-  display: block;
-  margin-bottom: var(--space-2);
-  color: var(--text-primary);
-}
-
-/* ─── Entrada ─────────────────────────────────────────────────────────── */
-
-.query {
-  margin-top: var(--space-6);
-}
-
-.query-row {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin-top: var(--space-2);
-}
-
-input[type='url'] {
-  flex: 1 1 20rem;
-  height: 48px;
-  padding: 0 var(--space-3);
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  border: none;
-  border-radius: var(--radius-md);
-  box-shadow: var(--elev-line);
-}
-
-input[type='url']:hover {
-  box-shadow: var(--elev-line-strong);
-}
-
-input[type='url']:focus {
-  outline: none;
-  box-shadow: 0 0 0 1px var(--focus), 0 0 0 4px var(--focus-ring);
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 button {
-  height: 48px;
-  padding: 0 var(--space-6);
-  font-family: inherit;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--accent-contrast);
-  background: var(--accent);
-  border: none;
-  border-radius: var(--radius-md);
+  font: inherit;
   cursor: pointer;
-  transition: background 120ms ease-out, transform 100ms ease-out;
 }
 
-button:hover:not(:disabled) {
-  background: var(--accent-hover);
+h1,
+h2,
+h3,
+p,
+ul,
+ol {
+  margin: 0;
 }
 
-button:active:not(:disabled) {
-  transform: scale(0.985);
+/* ==========================================================================
+   Tipografia
+   ========================================================================== */
+
+/*
+ * Headline em gradiente. `color` fica declarado ANTES do clip como fallback:
+ * navegador sem `background-clip: text` mostra texto sólido legível em vez de
+ * texto invisível, que é o modo de falha clássico desta técnica.
+ */
+.display-1 {
+  font-size: clamp(2.75rem, 6vw, 4.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  font-weight: 600;
+  color: var(--text-bright);
+  background-image: linear-gradient(
+    172deg,
+    var(--display-from) 16%,
+    var(--display-to) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-wrap: balance;
 }
 
-button:disabled {
-  opacity: 0.55;
-  cursor: progress;
+.display-2 {
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  color: var(--text-bright);
 }
 
-.hint {
-  margin-top: var(--space-3);
+.lead {
+  font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  color: var(--text-body);
+  max-width: 58ch;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.prose {
+  max-width: 72ch;
+  color: var(--text-body);
+}
+
+.small {
   font-size: 0.8125rem;
-  color: var(--text-secondary);
+  line-height: 1.5;
+  color: var(--text-dim);
 }
 
-.hint button {
-  height: auto;
-  padding: 0;
-  font-size: inherit;
-  font-weight: 400;
-  color: var(--accent);
-  background: none;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+/* Mono SEMPRE tabular: o percentual muda entre análises e não pode deslocar o
+   layout ao trocar de dígito. */
+.mono,
+.metric,
+.meta,
+.clock,
+.step-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ─── Seções do resultado ─────────────────────────────────────────────── */
+/* ==========================================================================
+   Casca e seções
+   ========================================================================== */
+
+.shell {
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding-inline: var(--space-5);
+  position: relative;
+  z-index: 1;
+}
 
 .section {
-  margin-top: var(--space-12);
+  padding-block: var(--space-16);
+  border-top: 1px solid var(--line);
+}
+
+.section-alt {
+  background: hsl(212 34% 7% / 0.5);
 }
 
 .section-head {
+  margin-bottom: var(--space-8);
+}
+
+.section-head .eyebrow {
+  display: block;
+  margin-bottom: var(--space-3);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+
+.skip:focus {
+  left: var(--space-4);
+  top: var(--space-2);
+  z-index: 20;
+  background: hsl(208 24% 16%);
+  color: var(--text-bright);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line-field);
+  border-radius: var(--r-sm);
+}
+
+/* ==========================================================================
+   Topbar
+   ========================================================================== */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: var(--topbar-h);
+  border-bottom: 1px solid var(--line);
+  background: hsl(214 30% 6% / 0.72);
+  backdrop-filter: saturate(160%) blur(14px);
+  padding-top: env(safe-area-inset-top);
+}
+
+.topbar-in {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-bright);
+}
+
+.wordmark:hover {
+  text-decoration: none;
+}
+
+.wordmark svg {
+  color: var(--accent);
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: 0.875rem;
+}
+
+.topnav a {
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.topnav a:hover {
+  color: var(--text-bright);
+  text-decoration: none;
+}
+
+/* ==========================================================================
+   Hero
+   ========================================================================== */
+
+.hero {
+  padding-block: var(--space-20) var(--space-16);
+}
+
+.hero .eyebrow {
+  display: block;
+  margin-bottom: var(--space-5);
+  color: var(--accent);
+}
+
+.hero .display-1 {
+  margin-bottom: var(--space-6);
+  max-width: 20ch;
+}
+
+.hero .lead {
+  margin-bottom: var(--space-10);
+}
+
+/* Duas strings do Lead: a curta no mobile, a longa no desktop. Por CSS, não
+   por JavaScript — não custa hidratação. */
+.lead-long {
+  display: none;
+}
+
+/* ==========================================================================
+   O formulário — campo e ação dentro de um painel translúcido
+   ========================================================================== */
+
+.query {
+  max-width: 46rem;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--space-3);
+}
+
+/*
+ * O painel é a moldura; o campo por dentro não tem borda própria. Evita borda
+ * dentro de borda e é o que dá o efeito de instrumento encaixado.
+ */
+.query-row {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--panel);
+  border: 1px solid var(--line-field);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--elev-inset);
+  transition: border-color 140ms ease-out;
+}
+
+.query-row:focus-within {
+  border-color: var(--accent);
+}
+
+.query input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding-inline: var(--space-4);
+  font: inherit;
+  color: var(--text-bright);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  outline-offset: -2px;
+}
+
+.query input::placeholder {
+  color: var(--text-faint);
+}
+
+.query input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn {
+  height: 44px;
+  padding-inline: var(--space-6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  white-space: nowrap;
+  transition:
+    filter 120ms ease-out,
+    transform 90ms ease-out;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.btn:disabled {
+  background: var(--accent-deep);
+  color: var(--text-body);
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: hsl(208 24% 16%);
+  color: var(--text-bright);
+  border-color: var(--line-field);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  filter: none;
+  border-color: var(--text-faint);
+}
+
+.btn-text {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hint {
+  margin-top: var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
+.field-error {
+  margin-top: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--fail);
+}
+
+/* ==========================================================================
+   Carregando
+   ==========================================================================
+   SEM barra de percentual e SEM estágio marcado como "atual". A rota devolve
+   tudo de uma vez; o cliente não sabe onde o servidor está. Marcar um passo
+   como concluído seria estado FABRICADO — foi removido do produto por isso.
+   O cronômetro é dado verdadeiro. A varredura é indeterminada por construção:
+   afirma atividade, não progresso.
+*/
+
+.progress {
+  margin-top: var(--space-8);
+  max-width: 46rem;
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--elev-inset);
+  overflow: hidden;
+}
+
+.sweep {
+  height: 2px;
+  background: var(--accent-deep);
+  overflow: hidden;
+}
+
+.sweep span {
+  display: block;
+  width: 25%;
+  height: 100%;
+  background: var(--accent);
+  animation: sweep 1400ms linear infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(500%);
+  }
+}
+
+.progress-body {
+  padding: var(--space-5) var(--space-6) var(--space-6);
+}
+
+.progress-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  flex-wrap: wrap;
   margin-bottom: var(--space-4);
 }
 
-/* ─── A leitura: o breakdown é a FIGURA PRINCIPAL (ADR-007) ───────────── */
+.progress-head strong {
+  color: var(--text-bright);
+  font-weight: 600;
+}
+
+.clock {
+  font-size: 0.875rem;
+  color: var(--accent);
+}
+
+.stages-intro {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  margin-bottom: var(--space-3);
+}
+
+.stages {
+  list-style: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-faint);
+}
+
+.stage-tick {
+  flex: 0 0 20px;
+  height: 1px;
+  background: var(--line-bright);
+}
+
+/* ==========================================================================
+   Erro
+   ========================================================================== */
+
+.error {
+  margin-top: var(--space-8);
+  max-width: 46rem;
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-left: 2px solid var(--fail);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(12px);
+  padding: var(--space-5) var(--space-6);
+}
+
+.error h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-bright);
+  margin-bottom: var(--space-2);
+}
+
+.error-retry {
+  margin-top: var(--space-3);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.error-actions {
+  margin-top: var(--space-5);
+}
+
+/* ==========================================================================
+   O resultado
+   ========================================================================== */
+
+.result {
+  /* Não fica sob o topbar sticky quando o scroll traz o painel ao topo. */
+  scroll-margin-top: calc(var(--topbar-h) + var(--space-6));
+  margin-top: var(--space-12);
+}
+
+.result:focus {
+  outline: none;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-radius: var(--r-lg);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--elev-inset);
+  overflow: hidden;
+}
+
+/*
+ * A barra de método — onde a ADR-004 é satisfeita.
+ *
+ * PRIMEIRO filho do painel, dentro da mesma borda, no mesmo nível hierárquico
+ * do resultado. O texto vem de `DISCLAIMER_PT_BR`, no domínio: íntegro, nunca
+ * truncado, nunca atrás de "ver mais", nunca colapsado no mobile.
+ */
+.method {
+  background: var(--panel-inset);
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-5) var(--space-6);
+}
+
+.method-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.method-head svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.method-head .eyebrow {
+  color: var(--accent);
+}
+
+.method p {
+  max-width: 62ch;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-body);
+}
+
+.method-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  font-size: 0.8125rem;
+}
+
+.warn {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin: var(--space-5) var(--space-6) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--panel-raised);
+  border-left: 2px solid var(--warn);
+  border-radius: var(--r-xs);
+  font-size: 0.8125rem;
+  color: var(--text-body);
+}
+
+.warn svg {
+  color: var(--warn);
+  flex: 0 0 auto;
+}
+
+/* --- O breakdown: a FIGURA PRINCIPAL (emenda da ADR-007) --- */
 
 .reading {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr;
+  padding: var(--space-4);
   gap: var(--space-3);
 }
 
-@media (max-width: 560px) {
-  .reading {
-    grid-template-columns: 1fr;
-  }
-}
-
 .reading-cell {
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elev-line);
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--space-5);
+  box-shadow: var(--elev-inset);
 }
 
-.reading-value {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 1.5rem;
+.metric {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
   font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
+  color: var(--text-bright);
 }
 
 .reading-name {
-  margin-top: var(--space-2);
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
+  margin-top: var(--space-3);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-body);
 }
 
 .reading-count {
   margin-top: var(--space-1);
-  font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
-/* Amostra do traço ao lado do percentual: a legenda vive junto do dado. */
-.stroke-sample {
+/*
+ * Amostra de traço: o segundo canal. Na interface a categoria é representada
+ * por TRAÇO, não por tinta — as tintas vivem só na folha.
+ */
+.stroke {
+  flex: 0 0 auto;
   display: inline-block;
-  width: 1.5rem;
-  margin-right: var(--space-2);
-  vertical-align: 0.3em;
-  border-bottom-width: 2px;
+  width: 24px;
+  height: 0;
+  border-top-width: 3px;
+  border-top-color: currentcolor;
 }
 
+.stroke-SOURCED {
+  border-top-style: solid;
+}
+
+.stroke-UNSOURCED {
+  border-top-style: dashed;
+}
+
+.stroke-OPINION {
+  border-top-style: dotted;
+}
+
+/* `unanalyzed` e `excluded` não são categorias e não têm traço próprio no
+   texto — na legenda recebem uma linha neutra, mais apagada. */
+.stroke-unanalyzed,
+.stroke-excluded {
+  border-top-style: solid;
+  border-top-width: 1px;
+  color: var(--text-faint);
+}
+
+/*
+ * A barra de proporção. Cada segmento é distinguível SEM cor por padrão de
+ * preenchimento: sólido, listrado 45°, pontilhado.
+ */
 .bar {
   display: flex;
-  height: 8px;
-  margin-top: var(--space-3);
+  height: 10px;
+  margin: 0 var(--space-6);
+  border-radius: var(--r-full);
   overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--bg-sunken);
+  background: var(--panel-inset);
 }
 
 .bar-part {
   height: 100%;
+  transform-origin: left center;
+}
+
+.fill-SOURCED {
+  background: var(--text-bright);
+}
+
+.fill-UNSOURCED {
+  background: repeating-linear-gradient(
+    45deg,
+    hsl(200 25% 96% / 0.85) 0 3px,
+    hsl(200 25% 96% / 0.3) 3px 6px
+  );
+}
+
+.fill-OPINION {
+  background: repeating-linear-gradient(
+    90deg,
+    hsl(200 25% 96% / 0.7) 0 2px,
+    hsl(200 25% 96% / 0.12) 2px 5px
+  );
 }
 
 .summary {
-  margin-top: var(--space-4);
-  font-size: 0.9375rem;
-  color: var(--text-primary);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  color: var(--text-body);
 }
-
-/* ─── Sem medida (unscored) ───────────────────────────────────────────── */
 
 .unscored {
   padding: var(--space-6);
-  background: var(--bg-sunken);
-  border-radius: var(--radius-lg);
+}
+
+.unscored h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-bright);
+  margin-bottom: var(--space-3);
 }
 
 .unscored p {
-  margin-top: var(--space-2);
-  color: var(--text-secondary);
-  max-width: 60ch;
+  max-width: 62ch;
+  font-size: 0.875rem;
+  color: var(--text-body);
 }
 
-/* ─── O manuscrito ────────────────────────────────────────────────────── */
+/* ==========================================================================
+   A FOLHA — o texto do usuário
+   ========================================================================== */
+
+.sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: var(--space-12) 0 var(--space-4);
+}
 
 .legend {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  margin-bottom: var(--space-3);
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--text-dim);
 }
 
 .legend-item {
@@ -415,57 +942,82 @@ button:disabled {
   gap: var(--space-2);
 }
 
-.manuscript {
-  padding: var(--space-6);
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elev-line-strong);
-  font-family: var(--font-serif), Georgia, serif;
+.sheet {
+  background: var(--sheet);
+  border: 1px solid var(--sheet-edge);
+  border-radius: var(--r-lg);
+  padding: var(--space-8);
+  max-height: 70vh;
+  overflow-y: auto;
+  color: var(--sheet-ink);
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
   font-size: 1.0625rem;
-  /* Entrelinha generosa não é estética: o sublinhado de anotação precisa de
-     ar para não colidir com a linha seguinte. */
-  line-height: 1.75;
-  max-width: var(--measure);
+  /* Não é estética: o sublinhado de anotação precisa de ar para não colidir
+     com a linha seguinte. */
+  line-height: 1.8;
+}
+
+.sheet-inner {
+  max-width: 65ch;
+  margin-inline: auto;
 }
 
 /*
- * ⚠️ CASCATA — leia antes de mexer.
+ * `display: inline` num `<button>` é deliberado: o padrão é inline-block, e
+ * inline-block NÃO quebra entre linhas. Como cada sentença do artigo tem
+ * dezenas de palavras, o padrão produziria uma caixa única estourando a folha.
+ */
+.sentence {
+  display: inline;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.sentence-static {
+  cursor: default;
+}
+
+/* Rótulo só para leitor de tela: o glifo visual é aria-hidden. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * O reset de `mark` vive no seletor de ELEMENTO — especificidade (0,0,1) — e as
+ * categorias em classes, (0,1,0). Assim eles NUNCA competem.
  *
- * Um bug real nesta folha anulou o fundo do destaque: `.text mark` tinha
- * especificidade (0,1,1) e vencia `.cat-*`, de (0,1,0). Todo destaque ficava
- * transparente, e a tela não parecia quebrada — parecia decisão de design.
- *
- * A estrutura abaixo torna isso IMPOSSÍVEL, não só improvável:
- *
- *   - o reset do amarelo padrão vive em `mark`, seletor de ELEMENTO (0,0,1)
- *   - forma e espaçamento também vivem em `mark`
- *   - NÃO EXISTE regra descendente do tipo `.manuscript mark`
- *   - só as classes `.cat-*` (0,1,0) pintam, e nada compete com elas
- *
- * Dois testes guardam isto. O de cascata mede o computado com jsdom, mas foi
- * MEDIDO que o jsdom aplica ordem de origem e ignora especificidade — então
- * ele sozinho não pega uma regra anterior de maior especificidade. Por isso
- * existe tambem uma guarda que varre o FONTE atrás de regra descendente
- * mirando `mark`, e essa não depende de motor nenhum.
+ * Nenhuma regra descendente pode mirar `mark`: uma regra como
+ * `.sheet-inner mark` teria (0,1,1) e roubaria o fundo de todos os destaques,
+ * independente da ordem em que aparecesse. Isso já aconteceu neste projeto,
+ * passou por revisão de código, e a tela não pareceu quebrada — a cor do texto
+ * ainda diferenciava. `tests/adapters/ui/guarda-estrutural.test.ts` guarda a
+ * propriedade estrutural, porque o jsdom ignora especificidade e o teste de
+ * cascata sozinho não pega esse caso.
  */
 mark {
   background: transparent;
   color: inherit;
   padding: 1px 2px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-xs);
+  border-bottom-width: 2px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  cursor: pointer;
 }
 
-/*
- * Cor NUNCA é o único canal. Cada categoria tem traço próprio — cheio,
- * tracejado, pontilhado — distinguível em escala de cinza, em qualquer
- * deficiência de visão de cor, e impresso em preto e branco.
- */
 .cat-SOURCED {
   background: var(--cat-sourced-bg);
   color: var(--cat-sourced);
-  border-bottom-width: 2px;
   border-bottom-style: solid;
   border-bottom-color: var(--cat-sourced);
 }
@@ -473,7 +1025,6 @@ mark {
 .cat-UNSOURCED {
   background: var(--cat-unsourced-bg);
   color: var(--cat-unsourced);
-  border-bottom-width: 2px;
   border-bottom-style: dashed;
   border-bottom-color: var(--cat-unsourced);
 }
@@ -481,141 +1032,428 @@ mark {
 .cat-OPINION {
   background: var(--cat-opinion-bg);
   color: var(--cat-opinion);
-  border-bottom-width: 2px;
   border-bottom-style: dotted;
   border-bottom-color: var(--cat-opinion);
 }
 
-/* As DUAS ausências, deliberadamente distintas entre si. */
-.excluded {
-  color: var(--text-muted);
-}
-
+/*
+ * As duas ausências NÃO podem renderizar idênticas.
+ *
+ * `unanalyzed` é sentença analisável que ficou fora do cap de truncagem;
+ * `excluded` é sentença que o segmentador descartou (título, item de lista,
+ * fragmento sem verbo). Pintar as duas igual atribui à primeira uma razão
+ * falsa — o leitor conclui "o sistema achou que isso não é afirmação", quando
+ * na verdade o sistema nem olhou.
+ *
+ * O canal é FUNDO, não traço: solid/dashed/dotted já pertencem às três
+ * categorias, e reusar um deles criaria colisão visual com elas.
+ */
 .unanalyzed {
-  color: var(--text-muted);
-  background: var(--bg-sunken);
-  border-bottom-width: 1px;
-  border-bottom-style: dashed;
-  border-bottom-color: var(--border-strong);
+  color: var(--sheet-dim);
+  background: hsl(205 8% 42% / 0.09);
+  border-radius: var(--r-xs);
+  padding: 1px 2px;
 }
 
-/* ─── Ficha técnica — onde o composto mora (ADR-007) ──────────────────── */
+.excluded {
+  color: var(--sheet-dim);
+}
+
+/* --- Popover de sentença: exibe os `signals`, invisíveis até agora --- */
+
+.pop-wrap {
+  position: relative;
+  display: inline;
+}
+
+/*
+ * Fundo OPACO de propósito. O popover cobre o texto do artigo, e translucidez
+ * aqui colocaria letra sobre letra — o único lugar da tela onde o vidro
+ * atrapalharia em vez de ajudar.
+ */
+.pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 15;
+  width: min(22rem, 78vw);
+  background: hsl(208 24% 15%);
+  border: 1px solid var(--line-field);
+  border-radius: var(--r-md);
+  padding: var(--space-4);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-body);
+  text-align: left;
+  cursor: auto;
+  box-shadow: var(--elev-inset);
+}
+
+.pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-bright);
+}
+
+.pop-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.pop-close {
+  background: none;
+  border: 0;
+  padding: var(--space-1);
+  color: var(--text-dim);
+  display: inline-flex;
+}
+
+.pop-close:hover {
+  color: var(--text-bright);
+}
+
+.pop-row {
+  display: flex;
+  gap: var(--space-3);
+  padding-block: var(--space-1);
+}
+
+.pop-key {
+  flex: 0 0 5.5rem;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.pop-val {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+/* ==========================================================================
+   Ficha técnica — e é AQUI que o composto de 0 a 100 mora
+   ==========================================================================
+   Peso visual de número de build, ao lado da versão e do tempo. A forma torna
+   as proibições da emenda da ADR-007 difíceis de violar: não há onde crescer o
+   número sem quebrar o alinhamento, não há cor associada, não há faixa nem
+   seta de tendência.
+*/
 
 .record {
   margin-top: var(--space-8);
-  padding: var(--space-4);
-  background: var(--bg-sunken);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.75rem;
-  line-height: 1.6;
-  color: var(--text-muted);
+  background: var(--panel-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--space-5) var(--space-6);
+  backdrop-filter: blur(8px);
+}
+
+.record .eyebrow {
+  display: block;
+  margin-bottom: var(--space-4);
 }
 
 .record-row {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-6);
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+
+.record-row:first-of-type {
+  border-top: 0;
+}
+
+.meta {
+  font-size: 0.75rem;
+  line-height: 1.6;
 }
 
 .record-key {
-  flex: 0 0 5.5rem;
-  color: var(--text-secondary);
+  flex: 0 0 6rem;
+  color: var(--text-faint);
 }
 
 .record-val {
-  flex: 1;
+  color: var(--text-dim);
   word-break: break-word;
 }
 
-/* ─── Progresso ───────────────────────────────────────────────────────── */
+/* ==========================================================================
+   Seção: para que serve
+   ==========================================================================
+   Vem logo depois do herói porque e' ali que a duvida aparece. O heroi faz uma
+   AFIRMACAO, "como funciona" descreve o MECANISMO e "o que nao medimos" e'
+   NEGACAO — nenhum dos tres responde "eu devo usar isso, e para que".
 
-.progress {
-  margin-top: var(--space-6);
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elev-line);
+   Nao usa numeracao de proposito: "como funciona" logo abaixo ja' e' uma lista
+   numerada, e duas listas numeradas seguidas confundem em vez de esclarecer.
+   Aqui os blocos sao rotulados por PAPEL: o que voce faz, o que ele devolve, o
+   que voce resolve.
+*/
+
+.usage {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  margin-top: var(--space-10);
 }
 
-.progress-head {
+.usage-step .eyebrow {
+  display: block;
+  color: var(--accent);
+  margin-bottom: var(--space-3);
+}
+
+.usage-step p {
+  font-size: 0.9375rem;
+  color: var(--text-body);
+}
+
+.fit {
+  margin-top: var(--space-10);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fit-row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--elev-inset);
+}
+
+.fit-tag {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.fit-yes .fit-tag {
+  color: var(--accent);
+}
+
+.fit-row p {
+  font-size: 0.875rem;
+  color: var(--text-body);
+}
+
+/* ==========================================================================
+   Seção: como funciona — os 5 estágios REAIS do pipeline
+   ========================================================================== */
+
+.steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  list-style: none;
+  padding: 0;
+}
+
+.step {
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--line-bright);
+}
+
+.step-num {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-bottom: var(--space-2);
+}
+
+.step-name {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-bright);
+  margin-bottom: var(--space-2);
+}
+
+.step p {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
+/* ==========================================================================
+   Seção: os três lápis
+   ========================================================================== */
+
+.pencils {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: var(--space-4);
 }
 
-.progress-clock {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+.pencil {
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-radius: var(--r-md);
+  padding: var(--space-6);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--elev-inset);
 }
 
-.stages {
-  margin: var(--space-3) 0 0;
-  padding: 0;
+.pencil-stroke {
+  color: var(--text-bright);
+  margin-bottom: var(--space-4);
+}
+
+.pencil h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-bright);
+  margin-bottom: var(--space-4);
+}
+
+.pencil blockquote {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--accent-deep);
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-body);
+}
+
+.pencil-note {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
+.pencil-tag {
+  display: block;
+  margin-top: var(--space-4);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   Seção: o que não medimos — grid assimétrico
+   ========================================================================== */
+
+.claims {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-8);
+}
+
+.claims p + p {
+  margin-top: var(--space-4);
+}
+
+.ledger {
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-radius: var(--r-md);
+  padding: var(--space-6);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--elev-inset);
+}
+
+.ledger ul {
   list-style: none;
-  font-size: 0.8125rem;
-}
-
-.stage {
-  display: flex;
-  align-items: center;
+  padding: 0;
+  display: grid;
   gap: var(--space-3);
-  padding: var(--space-1) 0;
-  color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
-.stage-tick {
-  flex: 0 0 24px;
-  height: 3px;
-  border-radius: var(--radius-full);
-  background: var(--border);
+.ledger li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
 }
 
-.stages-intro {
-  margin-top: var(--space-3);
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
-/* Esqueleto: reserva o espaço para não haver salto de layout. */
-.skeleton {
-  background: var(--bg-sunken);
-  border-radius: var(--radius-sm);
-}
-
-/* ─── Erro e avisos ───────────────────────────────────────────────────── */
-
-.error {
-  margin-top: var(--space-4);
-  padding: var(--space-4);
-  background: var(--error-bg);
-  border-radius: var(--radius-md);
-  box-shadow: 0 0 0 1px var(--error);
-}
-
-.error-retry {
-  margin-top: var(--space-2);
+.ledger-mark {
+  flex: 0 0 1.25rem;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
-.warn {
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--notice-bg);
-  border-radius: var(--radius-md);
+.ledger-yes .ledger-mark {
+  color: var(--accent);
+}
+
+.ledger-split {
+  margin: var(--space-5) 0;
+  border: 0;
+  border-top: 1px solid var(--line-bright);
+}
+
+/* ==========================================================================
+   Rodapé
+   ========================================================================== */
+
+.foot {
+  border-top: 1px solid var(--line);
+  padding-block: var(--space-12);
+  padding-bottom: calc(var(--space-12) + env(safe-area-inset-bottom));
+}
+
+.foot-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--line);
+}
+
+.foot-tag {
   font-size: 0.8125rem;
-  color: var(--notice);
+  color: var(--text-dim);
 }
 
-/* ─── Movimento ───────────────────────────────────────────────────────── */
+.foot-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-top: var(--space-6);
+  font-size: 0.8125rem;
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   Movimento
+   ==========================================================================
+   Só `opacity` e `transform`. Nada de animar width, height, top, left ou
+   box-shadow.
+
+   O número do breakdown NÃO tem contador subindo até o valor: além de ser a
+   assinatura de dashboard de 2020, faria uma medição instável parecer um
+   instrumento se assentando.
+*/
+
+.rise {
+  animation: rise 480ms var(--ease) both;
+}
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -623,32 +1461,187 @@ mark {
   }
 }
 
-@keyframes fade {
+.rise-1 {
+  animation-delay: 60ms;
+}
+
+.rise-2 {
+  animation-delay: 120ms;
+}
+
+.rise-3 {
+  animation-delay: 180ms;
+}
+
+.grow {
+  animation: grow 620ms var(--ease) both;
+}
+
+@keyframes grow {
   from {
-    opacity: 0;
+    transform: scaleX(0);
   }
   to {
-    opacity: 1;
+    transform: scaleX(1);
   }
 }
 
-.rise {
-  animation: rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.pop {
+  animation: popin 160ms var(--ease) both;
+}
+
+@keyframes popin {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {
-    animation-duration: 120ms !important;
-    transition-duration: 120ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 
-  .rise {
-    animation-name: fade;
+  /* A varredura para e a trilha fica estática — o cronômetro, que é texto,
+     continua contando. */
+  .sweep span {
+    animation: none;
+    width: 100%;
+    background: var(--accent-deep);
+  }
+}
+
+/*
+ * Transparência reduzida: quem liga isso normalmente liga por dificuldade de
+ * ler sobre fundo movimentado. Os painéis viram opacos e a malha sai. O
+ * contraste só MELHORA — os valores testados são o pior caso translúcido, e
+ * painel opaco é mais escuro que painel translúcido sobre o halo.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --panel: hsl(210 28% 11%);
+    --panel-inset: hsl(212 36% 7%);
+    --panel-raised: hsl(208 24% 16%);
   }
 
-  button:active:not(:disabled) {
-    transform: none;
+  body::after {
+    display: none;
+  }
+
+  .panel,
+  .progress,
+  .error,
+  .pencil,
+  .ledger,
+  .query-row,
+  .record,
+  .topbar {
+    backdrop-filter: none;
+  }
+}
+
+/* ==========================================================================
+   Responsivo — mobile-first, então aqui só o que CRESCE
+   ========================================================================== */
+
+@media (min-width: 640px) {
+  .reading {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .record-row {
+    gap: var(--space-8);
+  }
+
+  .lead-short {
+    display: none;
+  }
+
+  .lead-long {
+    display: inline;
+  }
+}
+
+@media (min-width: 900px) {
+  .section {
+    padding-block: var(--space-28);
+  }
+
+  .hero {
+    padding-block: var(--space-36) var(--space-28);
+  }
+
+  .shell {
+    padding-inline: var(--space-8);
+  }
+
+  .steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-8);
+  }
+
+  .pencils {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+  }
+
+  .usage {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-8);
+  }
+
+  .fit-row {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--space-5);
+  }
+
+  .fit-tag {
+    flex: 0 0 9rem;
+  }
+
+  /* Assimétrico 7/12 + 5/12, conforme a spec. */
+  .claims {
+    grid-template-columns: 7fr 5fr;
+    gap: var(--space-12);
+  }
+
+  .sheet {
+    padding: var(--space-10) var(--space-12);
+  }
+}
+
+@media (max-width: 639px) {
+  .query-row {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .record-row {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .record-key {
+    flex-basis: auto;
+  }
+
+  .sheet {
+    padding: var(--space-5);
   }
 }
