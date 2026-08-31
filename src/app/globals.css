@@ -1253,6 +1253,21 @@ mark {
   color: var(--text-body);
 }
 
+.record-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.record-note {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
 /* ==========================================================================
    Seção: como funciona — os 5 estágios REAIS do pipeline
    ========================================================================== */

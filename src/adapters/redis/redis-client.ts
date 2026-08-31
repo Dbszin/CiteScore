@@ -6,7 +6,7 @@
  * lógica testável sem rede e sem credenciais, e mantém a biblioteca externa
  * a uma troca de distância.
  *
- * Cinco operações. Se crescer muito além disso, provavelmente a lógica está
+ * Seis operações. Se crescer muito além disso, provavelmente a lógica está
  * vazando para o adapter.
  */
 export interface RedisClient {
@@ -31,6 +31,16 @@ export interface RedisClient {
    * que nunca expira bloqueia o produto no dia seguinte.
    */
   incrByWithTtl(key: string, amount: number, ttlSeconds: number): Promise<number>;
+
+  /**
+   * Grava com expiração numa ida só.
+   *
+   * Mesma razão de `incrByWithTtl`: `set` seguido de `expire` deixa uma janela
+   * em que a chave existe SEM TTL. Aqui a consequência é diferente e pior — um
+   * resultado de análise sem expiração fica servido para sempre, e o usuário
+   * que corrigiu o próprio texto nunca mais veria a medição nova.
+   */
+  setWithTtl(key: string, value: string, ttlSeconds: number): Promise<void>;
 }
 
 /**

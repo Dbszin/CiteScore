@@ -4,6 +4,7 @@ import type { AnalysisErrorCode } from '../../../core/domain/errors.js';
 import { isAnalysisError, USER_MESSAGES } from '../../../core/domain/errors.js';
 import { clientKeyFrom } from './client-key.js';
 import { HTTP_STATUS } from './error-status.js';
+import { readIncludeSuggestions, readRefresh } from './request-body.js';
 
 /**
  * Adapter de entrada HTTP.
@@ -13,7 +14,6 @@ import { HTTP_STATUS } from './error-status.js';
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
 
 /**
  * Erro PREVISTO: o pipeline reconheceu a situação e tem mensagem para ela.
@@ -79,6 +79,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const includeSuggestions = readIncludeSuggestions(body);
+  const refresh = readRefresh(body);
 
   try {
     const analyzeUrl = getAnalyzeUrl();
@@ -86,6 +87,7 @@ export async function POST(request: Request): Promise<Response> {
       url,
       clientKey: clientKeyFrom(request.headers),
       includeSuggestions,
+      refresh,
     });
     return NextResponse.json({ ok: true, analysis });
   } catch (error) {
@@ -119,9 +121,3 @@ function readUrl(body: unknown): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
-/** Default `true`, conforme o contrato em `api/spec.md`. */
-function readIncludeSuggestions(body: unknown): boolean {
-  if (typeof body !== 'object' || body === null) return true;
-  const value = (body as Record<string, unknown>)['includeSuggestions'];
-  return typeof value === 'boolean' ? value : true;
-}

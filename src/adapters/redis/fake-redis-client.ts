@@ -15,6 +15,14 @@ import { RedisUnavailableError } from './redis-client.js';
  */
 export class FakeRedisClient implements RedisClient {
   private readonly valores = new Map<string, number>();
+  /**
+   * Valores de TEXTO, separados dos contadores.
+   *
+   * O Redis de verdade guarda tudo como string; aqui os contadores sao numero
+   * por conveniencia de teste, entao texto precisa de mapa proprio. `get`
+   * consulta os dois.
+   */
+  private readonly textos = new Map<string, string>();
   /** Instante de expiração, em ms. */
   private readonly expiracoes = new Map<string, number>();
 
@@ -38,6 +46,7 @@ export class FakeRedisClient implements RedisClient {
     const vence = this.expiracoes.get(key);
     if (vence !== undefined && this.clock.now() >= vence) {
       this.valores.delete(key);
+      this.textos.delete(key);
       this.expiracoes.delete(key);
     }
   }
@@ -45,8 +54,20 @@ export class FakeRedisClient implements RedisClient {
   async get(key: string): Promise<string | null> {
     this.garantirDisponivel('get');
     this.expirarSeVencida(key);
+    const texto = this.textos.get(key);
+    if (texto !== undefined) return texto;
     const valor = this.valores.get(key);
     return valor === undefined ? null : String(valor);
+  }
+
+  async setWithTtl(key: string, value: string, ttlSeconds: number): Promise<void> {
+    this.garantirDisponivel('setWithTtl');
+    this.textos.set(key, value);
+    // Aqui o TTL e' reaplicado a cada gravacao, ao contrario de
+    // `incrByWithTtl`: gravar de novo e' um resultado NOVO, e ele merece a
+    // janela inteira. No contador seria o oposto — reaplicar faria a janela
+    // deslizar para sempre.
+    this.expiracoes.set(key, this.clock.now() + ttlSeconds * 1_000);
   }
 
   async incrBy(key: string, amount: number): Promise<number> {
@@ -67,7 +88,7 @@ export class FakeRedisClient implements RedisClient {
   async ttl(key: string): Promise<number> {
     this.garantirDisponivel('ttl');
     this.expirarSeVencida(key);
-    if (!this.valores.has(key)) return -2;
+    if (!this.valores.has(key) && !this.textos.has(key)) return -2;
     const vence = this.expiracoes.get(key);
     if (vence === undefined) return -1;
     return Math.ceil((vence - this.clock.now()) / 1_000);

@@ -54,13 +54,21 @@ export function Analyzer() {
   const [url, setUrl] = useState('');
   const [state, setState] = useState<State>({ kind: 'idle' });
 
-  async function analisar(alvo: string): Promise<void> {
+  /**
+   * `refresh` ignora o que estiver guardado no cache do servidor.
+   *
+   * Existe porque o cache, sozinho, quebraria o caso de uso principal: quem
+   * editou o próprio artigo e voltou para conferir receberia a medição de
+   * antes, e concluiria que a reescrita não adiantou. Continua sujeito ao
+   * mesmo limite de 10 por hora — não é porta dos fundos para gasto.
+   */
+  async function analisar(alvo: string, refresh = false): Promise<void> {
     setState({ kind: 'loading' });
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: alvo, includeSuggestions: false }),
+        body: JSON.stringify({ url: alvo, includeSuggestions: false, refresh }),
       });
       const body: unknown = await response.json();
 
@@ -175,7 +183,14 @@ export function Analyzer() {
         </div>
       )}
 
-      {state.kind === 'done' && <Report analysis={state.analysis} />}
+      {state.kind === 'done' && (
+        <Report
+          analysis={state.analysis}
+          onReanalisar={() => {
+            void analisar(url, true);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -229,7 +244,13 @@ function Progress() {
   );
 }
 
-function Report({ analysis }: { analysis: Analysis }) {
+function Report({
+  analysis,
+  onReanalisar,
+}: {
+  analysis: Analysis;
+  onReanalisar: () => void;
+}) {
   const panel = buildScorePanel(analysis);
   const segments = buildSegments(analysis);
   const legend = buildLegend(segments);
@@ -303,6 +324,19 @@ function Report({ analysis }: { analysis: Analysis }) {
             <span className="record-val">{row.value}</span>
           </div>
         ))}
+        {/*
+          Fica na ficha técnica, e não perto do resultado, porque é ação sobre
+          a EXECUÇÃO e não sobre a leitura. Quem só quer ler o relatório não
+          precisa dela; quem reescreveu o texto e voltou, precisa.
+        */}
+        <div className="record-action">
+          <button className="btn-text" type="button" onClick={onReanalisar}>
+            Analisar de novo
+          </button>
+          <span className="record-note">
+            ignora o resultado guardado e mede outra vez
+          </span>
+        </div>
       </section>
     </div>
   );

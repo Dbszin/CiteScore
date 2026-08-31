@@ -68,4 +68,13 @@ export class UpstashRedisClient implements RedisClient {
       return novo;
     });
   }
+
+  async setWithTtl(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.executar('setWithTtl', async () => {
+      // `ex` no proprio SET: uma ida, e a chave NUNCA existe sem expiracao.
+      // Fazer `set` e depois `expire` deixaria uma janela em que um resultado
+      // de analise fica guardado para sempre.
+      await this.redis.set(key, value, { ex: ttlSeconds });
+    });
+  }
 }

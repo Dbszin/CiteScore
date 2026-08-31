@@ -2,6 +2,8 @@ import type { AnalyzeUrlDeps, AnalyzeUrlInput } from '../../core/usecases/analyz
 import type { Analysis } from '../../core/domain/analysis.js';
 import { createAnalyzeUrl } from '../../core/usecases/analyze-url.js';
 import { UnlimitedBudgetGuard } from '../budget/unlimited-budget-guard.js';
+import { NoopAnalysisCache } from '../cache/noop-analysis-cache.js';
+import { RedisAnalysisCache } from '../cache/redis-analysis-cache.js';
 import {
   ClaudeClassifier,
   createAnthropicClient,
@@ -18,6 +20,7 @@ import type {
   ClaimClassifier,
   ClassifierUsage,
 } from '../../core/ports/claim-classifier.js';
+import type { AnalysisCache } from '../../core/ports/analysis-cache.js';
 import type { CostRecorder } from '../../core/ports/cost-recorder.js';
 import type { BudgetGuard } from '../../core/ports/budget-guard.js';
 import type { RateLimiter } from '../../core/ports/rate-limiter.js';
@@ -64,6 +67,12 @@ class ConsoleCostRecorder implements CostRecorder {
 }
 
 export interface Guardas {
+  /**
+   * O cache viaja junto das guardas porque depende da MESMA credencial de
+   * Redis. Separar em outra funcao duplicaria a leitura de `REDIS_URL` e
+   * abriria a chance de as duas discordarem sobre se ha' Redis.
+   */
+  readonly analysisCache: AnalysisCache;
   readonly rateLimiter: RateLimiter;
   readonly budgetGuard: BudgetGuard;
   readonly costRecorder: CostRecorder;
@@ -87,6 +96,10 @@ export function escolherGuardas(env: Env, clock: Clock): Guardas {
       rateLimiter: new AllowAllRateLimiter(),
       budgetGuard: new UnlimitedBudgetGuard(),
       costRecorder: new ConsoleCostRecorder(),
+      // Sem `assertNotProduction`, ao contrario dos dois acima: cache ausente
+      // e' mais caro, nao e' inseguro. Bloquear deploy por causa dele
+      // confundiria economia com protecao.
+      analysisCache: new NoopAnalysisCache(),
     };
   }
 
@@ -110,6 +123,7 @@ export function escolherGuardas(env: Env, clock: Clock): Guardas {
       keyPrefix,
     }),
     costRecorder: new RedisCostRecorder({ pricing }),
+    analysisCache: new RedisAnalysisCache(client),
   };
 }
 
@@ -174,6 +188,7 @@ function buildDeps(): AnalyzeUrlDeps {
     rateLimiter: guardas.rateLimiter,
     budgetGuard: guardas.budgetGuard,
     costRecorder: guardas.costRecorder,
+    analysisCache: guardas.analysisCache,
     clock,
     config: {
       methodologyUrl: env.METHODOLOGY_URL,

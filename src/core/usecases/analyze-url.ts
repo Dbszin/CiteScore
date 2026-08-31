@@ -4,6 +4,8 @@ import { analysisError, isAnalysisError } from '../domain/errors.js';
 import type { ExtractedContent } from '../domain/extracted-content.js';
 import { assessIndexPage } from '../domain/index-page-guard.js';
 import { buildMethodology } from '../domain/methodology.js';
+import { buildAnalysisCacheKey } from '../domain/cache-key.js';
+import type { AnalysisCache } from '../ports/analysis-cache.js';
 import type { Sentence } from '../domain/sentence.js';
 import type { BudgetGuard } from '../ports/budget-guard.js';
 import type {
@@ -54,6 +56,12 @@ export interface AnalyzeUrlDeps {
   readonly costRecorder: CostRecorder;
   readonly clock: Clock;
   readonly config: AnalyzeUrlConfig;
+  /**
+   * OPCIONAL de propósito. Cache é conveniência, e um contrato que o exige
+   * transformaria conveniência em ponto de falha — além de obrigar todo teste
+   * do pipeline a montar um cache que ele não usa.
+   */
+  readonly analysisCache?: AnalysisCache;
 }
 
 export interface AnalyzeUrlInput {
@@ -61,6 +69,17 @@ export interface AnalyzeUrlInput {
   /** IP ou chave derivada, para rate limit. */
   readonly clientKey: string;
   readonly includeSuggestions: boolean;
+  /**
+   * Ignora o que estiver guardado e analisa de novo.
+   *
+   * É o que impede o cache de quebrar o caso de uso principal: quem editou o
+   * próprio artigo e voltou para conferir PRECISA de medição nova, e receber
+   * o resultado de antes faria a reescrita dele parecer inútil.
+   *
+   * Não é porta dos fundos para gasto: `refresh` acontece DEPOIS do rate
+   * limit, então continua limitado a 10 por hora como qualquer análise.
+   */
+  readonly refresh?: boolean;
 }
 
 /** @throws AnalysisError */
@@ -77,7 +96,22 @@ export function createAnalyzeUrl(
       throw analysisError('RATE_LIMITED', undefined, rate.retryAfterSeconds);
     }
 
-    // ─── 2. Fetch e extração ──────────────────────────────────────────
+    // ─── 2. Cache ─────────────────────────────────────────────────────
+    // DEPOIS do rate limit: acerto de cache não pode virar burla de limite.
+    // ANTES do fetch: o acerto pula busca, extração, segmentação e
+    // classificação de uma vez — economiza o gasto E os ~10 segundos.
+    const cacheKey = buildAnalysisCacheKey({
+      url: input.url,
+      scoreVersion: SCORE_VERSION,
+      model: deps.config.model,
+    });
+
+    if (deps.analysisCache !== undefined && input.refresh !== true) {
+      const guardada = await deps.analysisCache.get(cacheKey);
+      if (guardada !== null) return guardada;
+    }
+
+    // ─── 3. Fetch e extração ──────────────────────────────────────────
     const page = await deps.fetcher.fetch(input.url);
     const content = await deps.extractor.extract(page);
 
@@ -191,7 +225,7 @@ export function createAnalyzeUrl(
       await deps.costRecorder.record(totalUsage, deps.config.model);
     }
 
-    return {
+    const analysis: Analysis = {
       url: content.url,
       title: content.title,
       language: content.language,
@@ -206,6 +240,24 @@ export function createAnalyzeUrl(
       methodology: buildMethodology(deps.config.methodologyUrl),
       durationMs: deps.clock.now() - started,
     };
+
+    /*
+     * Gravar é a ÚLTIMA coisa, e o `await` é deliberado.
+     *
+     * Disparar sem esperar devolveria a resposta alguns milissegundos antes e
+     * abriria uma corrida: em ambiente serverless a instância pode ser
+     * congelada assim que a resposta sai, e a gravação nunca aconteceria — um
+     * cache que silenciosamente não guarda nada é pior que não ter cache,
+     * porque ninguém percebe.
+     *
+     * O adapter engole os próprios erros, então isto não pode derrubar uma
+     * análise que já foi feita e paga.
+     */
+    if (deps.analysisCache !== undefined) {
+      await deps.analysisCache.set(cacheKey, analysis);
+    }
+
+    return analysis;
   };
 }
 
