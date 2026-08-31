@@ -99,18 +99,13 @@ Três artigos, três autores, três tipos de texto — e em todos eles cerca de 
 
 <br>
 
-## Por que isso importa para GEO
+## Como ele ajuda no GEO
 
-**Generative Engine Optimization** é a disciplina de fazer conteúdo ser encontrado e citado por motores generativos — ChatGPT, Perplexity, AI Overviews. E a pesquisa da área já mediu quais mudanças de conteúdo têm mais efeito.
+**Generative Engine Optimization** é a disciplina de fazer conteúdo ser encontrado e citado por motores generativos — ChatGPT, Perplexity, AI Overviews. A pesquisa da área já mediu quais mudanças de conteúdo têm mais efeito, e **acrescentar citações, estatísticas e referências a fontes está entre as de maior impacto**: o paper [*GEO: Generative Engine Optimization*](https://arxiv.org/abs/2311.09735) (KDD 2024), que introduziu o benchmark GEO-bench, reporta ganhos da ordem de 30% a 40% em algumas condições.
 
-O paper [*GEO: Generative Engine Optimization*](https://arxiv.org/abs/2311.09735) (KDD 2024), que introduziu o benchmark GEO-bench, testou nove tipos de modificação. Entre os de maior impacto na visibilidade estão **acrescentar citações, estatísticas e referências a fontes** — ganhos da ordem de 30% a 40% em algumas condições, variando por domínio e tipo de consulta.
+**É essa alavanca que o CiteScore trabalha** — e trabalha fundo. GEO tem várias frentes; o CiteScore escolheu a de maior impacto medido e não para num diagnóstico geral: devolve a lista exata das frases que precisam de fonte, que é onde a intervenção acontece.
 
-**É exatamente essa alavanca que o CiteScore mede.** Ele mostra, frase a frase, onde o seu texto afirma sem sustentar — que é onde a intervenção acontece.
-
-GEO tem outras frentes: estrutura extraível, dados estruturados, cobertura de entidade, frescor. O CiteScore trabalha uma delas, e trabalha fundo: em vez de um diagnóstico geral, ele devolve a lista das frases a corrigir.
-
-> [!NOTE]
-> **A distinção que importa:** o CiteScore mede densidade factual, não a citação real do seu conteúdo em motores de IA. A ligação entre as duas coisas vem da pesquisa acima, não de uma medição nossa — e a ressalva viaja como campo obrigatório do payload da API, não como texto de tela.
+A ligação entre densidade de fonte e citabilidade vem dessa pesquisa, não de uma medição nossa. O que o CiteScore mede no seu texto é a densidade — que é a parte sob o seu controle, e a que dá para corrigir hoje.
 
 <br>
 
