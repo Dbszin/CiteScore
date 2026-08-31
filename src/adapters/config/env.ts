@@ -62,7 +62,17 @@ const EnvSchema = z.object({
   MAX_REDIRECTS: intFromEnv(3),
 
   /** ADR-004 exige que a metodologia seja acessível a um clique. */
-  METHODOLOGY_URL: z.string().min(1).default('/metodologia'),
+  /*
+   * O default aponta para a secao "O que nao medimos" da propria pagina, que
+   * EXISTE. O default anterior era `/metodologia`, uma rota que nunca foi
+   * criada — ou seja, o link "Ler o metodo" no painel de resultado dava 404, e
+   * a ADR-004 item 4 exige que a metodologia esteja a um clique do resultado.
+   *
+   * A secao na pagina satisfaz PARCIALMENTE: ela diz o que nao e' medido e por
+   * que o composto nao e' figura principal, mas nao lista os sinais nem a
+   * formula. A pagina dedicada esta registrada como debito em tasks.md.
+   */
+  METHODOLOGY_URL: z.string().min(1).default('/#metodo'),
 
   /** M4: contadores fora do processo. Ausente em dev — usa adapters locais. */
   REDIS_URL: z.string().optional(),

@@ -25,7 +25,11 @@ describe('loadEnv', () => {
     expect(env.ANTHROPIC_MODEL).toBe('claude-opus-5');
     expect(env.MAX_ANALYZABLE_SENTENCES).toBe(400);
     expect(env.RATE_LIMIT_PER_HOUR).toBe(10);
-    expect(env.METHODOLOGY_URL).toBe('/metodologia');
+    // Era '/metodologia' — uma rota que NUNCA foi criada. O link "Ler o
+    // método" no painel de resultado dava 404, e a ADR-004 item 4 exige a
+    // metodologia a um clique do resultado. O default virou a seção da própria
+    // página, que existe. A página dedicada segue como débito em tasks.md.
+    expect(env.METHODOLOGY_URL).toBe('/#metodo');
   });
 
   it('LANÇA quando falta a chave da API', () => {
