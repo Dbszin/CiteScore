@@ -115,11 +115,13 @@ Testado em **Node 20.20**.
 
 ```bash
 npm install
-cp .env.example .env.local     # preencha ANTHROPIC_API_KEY
+cp .env.example .env.local     # preencha GEMINI_API_KEY
 npm run dev
 ```
 
-Abre em `http://localhost:3000`. A única variável obrigatória é `ANTHROPIC_API_KEY` — todo o resto tem default.
+Abre em `http://localhost:3000`. A única variável obrigatória é a chave do provedor escolhido — todo o resto tem default.
+
+O classificador roda sobre **Gemini** por padrão, porque tem cota gratuita real. Trocar para Claude é `LLM_PROVIDER=anthropic`: `ClaimClassifier` é uma porta, então o provedor é um adapter e não uma reescrita.
 
 Em produção, `REDIS_URL` e `REDIS_TOKEN` passam a ser obrigatórias: a presença das duas é o que seleciona os adapters de produção, e sem elas o container falha alto de propósito em vez de rodar com contadores em memória que não sobrevivem a múltiplas instâncias.
 
@@ -130,8 +132,11 @@ Em produção, `REDIS_URL` e `REDIS_TOKEN` passam a ser obrigatórias: a presen�
 
 | Variável | Default | Para que serve |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Obrigatória.** Somente servidor, nunca `NEXT_PUBLIC_` |
-| `ANTHROPIC_MODEL` | `claude-haiku-4-5` | Ponto único de troca de modelo |
+| `LLM_PROVIDER` | `gemini` | Quem classifica: `gemini` ou `anthropic` |
+| `GEMINI_API_KEY` | — | **Obrigatória** com `LLM_PROVIDER=gemini` |
+| `ANTHROPIC_API_KEY` | — | **Obrigatória** com `LLM_PROVIDER=anthropic` |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Qual modelo do Gemini usar |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5` | Ponto único de troca de tier |
 | `MAX_CONTENT_BYTES` | `2000000` | Teto de bytes baixados |
 | `MAX_ANALYZABLE_SENTENCES` | `400` | Teto de sentenças analisadas |
 | `MAX_SENTENCES_PER_LLM_CALL` | `80` | Tamanho do lote enviado ao LLM |
@@ -163,6 +168,7 @@ Em produção, `REDIS_URL` e `REDIS_TOKEN` passam a ser obrigatórias: a presen�
 | `npm run calibrate` | Pipeline completo sobre o corpus, com relatório por artigo |
 | `npx tsx scripts/reprodutibilidade.ts` | Roda o mesmo artigo N vezes e compara |
 | `npx tsx scripts/measure-extraction.ts` | Extração e segmentação sobre os fixtures |
+| `npx tsx scripts/smoke-gemini.ts` | Uma chamada real ao Gemini, para provar a integração |
 
 <br>
 

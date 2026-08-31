@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLASSIFICATION_OUTPUT_FORMAT,
+  CLASSIFICATION_RESPONSE_SCHEMA_GEMINI,
   ClassificationBatchSchema,
   ClassificationItemSchema,
   SUGGESTION_OUTPUT_FORMAT,
@@ -68,6 +69,65 @@ describe('Consistência entre JSON Schema e Zod — classificação', () => {
 
   it('o tipo declarado é json_schema', () => {
     expect(CLASSIFICATION_OUTPUT_FORMAT.type).toBe('json_schema');
+  });
+});
+
+/*
+ * Agora sao TRES declaracoes da mesma estrutura: o Zod que valida a resposta,
+ * o JSON Schema da Anthropic e o responseSchema do Gemini. Tres declaracoes
+ * divergem ainda mais facil que duas — e a divergencia se manifesta como
+ * CLASSIFIER_INVALID_OUTPUT apontando para a causa errada, com um provedor
+ * devolvendo algo que o validador recusa.
+ */
+describe('Consistência do schema do Gemini', () => {
+  const item = (
+    CLASSIFICATION_RESPONSE_SCHEMA_GEMINI.properties.items as {
+      items: {
+        type: string;
+        properties: Record<string, unknown>;
+        required: string[];
+        propertyOrdering: string[];
+      };
+    }
+  ).items;
+  const zodKeys = Object.keys(ClassificationItemSchema.shape).sort();
+
+  it('os campos são exatamente os mesmos do Zod', () => {
+    expect(Object.keys(item.properties).sort()).toEqual(zodKeys);
+  });
+
+  it('todos os campos são obrigatórios', () => {
+    expect([...item.required].sort()).toEqual(zodKeys);
+  });
+
+  it('o enum de categoria coincide com o do Zod', () => {
+    const category = item.properties['category'] as { enum: string[] };
+    const zodEnum = [...ClassificationItemSchema.shape.category.options].sort();
+    expect([...category.enum].sort()).toEqual(zodEnum);
+  });
+
+  it('usa tipos em MAIÚSCULA, que é o que a API do Google aceita', () => {
+    // Enviar `object`/`array` minúsculo é rejeitado com 400. Um stub não pega
+    // isso, porque stub não valida o schema que recebe.
+    expect(CLASSIFICATION_RESPONSE_SCHEMA_GEMINI.type).toBe('OBJECT');
+    expect(item.type).toBe('OBJECT');
+  });
+
+  it('NÃO envia `additionalProperties` — a API do Google rejeita', () => {
+    expect(item).not.toHaveProperty('additionalProperties');
+    expect(CLASSIFICATION_RESPONSE_SCHEMA_GEMINI).not.toHaveProperty(
+      'additionalProperties',
+    );
+  });
+
+  it('fixa a ordem das chaves', () => {
+    // Sem `propertyOrdering` a ordem varia entre chamadas, e variação gratuita
+    // é o oposto do que `temperature: 0` existe para dar.
+    expect(item.propertyOrdering).toEqual(['id', 'category', 'confidence']);
+  });
+
+  it('NÃO tem campo de justificativa — mesmo lever de custo da ADR-005', () => {
+    expect(Object.keys(item.properties)).not.toContain('rationale');
   });
 });
 

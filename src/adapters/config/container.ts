@@ -6,6 +6,7 @@ import {
   ClaudeClassifier,
   createAnthropicClient,
 } from '../classify/claude-classifier.js';
+import { GeminiClassifier } from '../classify/gemini-classifier.js';
 import { HybridClassifier } from '../classify/hybrid-classifier.js';
 import { SystemClock } from '../clock/system-clock.js';
 import { ReadabilityExtractor } from '../extract/readability-extractor.js';
@@ -13,7 +14,10 @@ import { HttpContentFetcher } from '../fetch/http-content-fetcher.js';
 import { AllowAllRateLimiter } from '../ratelimit/allow-all-rate-limiter.js';
 import { IntlSentenceSegmenter } from '../segment/intl-sentence-segmenter.js';
 import { NoopSuggestionWriter } from '../suggest/noop-suggestion-writer.js';
-import type { ClassifierUsage } from '../../core/ports/claim-classifier.js';
+import type {
+  ClaimClassifier,
+  ClassifierUsage,
+} from '../../core/ports/claim-classifier.js';
 import type { CostRecorder } from '../../core/ports/cost-recorder.js';
 import type { BudgetGuard } from '../../core/ports/budget-guard.js';
 import type { RateLimiter } from '../../core/ports/rate-limiter.js';
@@ -109,17 +113,53 @@ export function escolherGuardas(env: Env, clock: Clock): Guardas {
   };
 }
 
+/**
+ * Qual provedor classifica.
+ *
+ * As chaves ja' foram validadas por `loadEnv`, que exige a do provedor
+ * escolhido — mas o TypeScript nao sabe disso, e as checagens abaixo existem
+ * para nao esconder um `undefined` atras de asercao. Se alguma disparar, e'
+ * bug do schema, nao entrada do usuario.
+ */
+function escolherMotor(env: Env): {
+  readonly classifier: ClaimClassifier;
+  readonly model: string;
+} {
+  if (env.LLM_PROVIDER === 'gemini') {
+    const apiKey = env.GEMINI_API_KEY;
+    if (apiKey === undefined) {
+      throw new Error('GEMINI_API_KEY ausente apos a validacao de ambiente');
+    }
+    return {
+      classifier: new GeminiClassifier({
+        apiKey,
+        model: env.GEMINI_MODEL,
+        maxSentencesPerCall: env.MAX_SENTENCES_PER_LLM_CALL,
+      }),
+      model: env.GEMINI_MODEL,
+    };
+  }
+
+  const apiKey = env.ANTHROPIC_API_KEY;
+  if (apiKey === undefined) {
+    throw new Error('ANTHROPIC_API_KEY ausente apos a validacao de ambiente');
+  }
+  return {
+    classifier: new ClaudeClassifier(createAnthropicClient(apiKey), {
+      model: env.ANTHROPIC_MODEL,
+      maxSentencesPerCall: env.MAX_SENTENCES_PER_LLM_CALL,
+    }),
+    model: env.ANTHROPIC_MODEL,
+  };
+}
+
 function buildDeps(): AnalyzeUrlDeps {
   const env = loadEnv();
   const clock = new SystemClock();
   const guardas = escolherGuardas(env, clock);
 
-  const classifier = new HybridClassifier(
-    new ClaudeClassifier(createAnthropicClient(env.ANTHROPIC_API_KEY), {
-      model: env.ANTHROPIC_MODEL,
-      maxSentencesPerCall: env.MAX_SENTENCES_PER_LLM_CALL,
-    }),
-  );
+  const motor = escolherMotor(env);
+  const classifier = new HybridClassifier(motor.classifier);
 
   return {
     fetcher: new HttpContentFetcher({
@@ -137,7 +177,10 @@ function buildDeps(): AnalyzeUrlDeps {
     clock,
     config: {
       methodologyUrl: env.METHODOLOGY_URL,
-      model: env.ANTHROPIC_MODEL,
+      // O modelo REALMENTE usado, nao o da Anthropic por default: ele viaja
+      // ate' a ficha tecnica da tela e ate' o registro de custo. Fixar um
+      // nome que nao classificou nada seria relatar execucao que nao houve.
+      model: motor.model,
       maxAnalyzableSentences: env.MAX_ANALYZABLE_SENTENCES,
     },
   };

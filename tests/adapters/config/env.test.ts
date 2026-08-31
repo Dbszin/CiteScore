@@ -17,11 +17,22 @@ afterEach(() => {
   resetEnvCache();
 });
 
-const valido: EnvSource = { ANTHROPIC_API_KEY: 'sk-ant-teste' };
+/*
+ * O ambiente mínimo passou a exigir a chave do GEMINI, não a da Anthropic: o
+ * default de `LLM_PROVIDER` é `gemini`, porque o produto precisa poder ficar
+ * público sem custo por análise.
+ */
+const valido: EnvSource = { GEMINI_API_KEY: 'AIza-teste' };
+const validoAnthropic: EnvSource = {
+  LLM_PROVIDER: 'anthropic',
+  ANTHROPIC_API_KEY: 'sk-ant-teste',
+};
 
 describe('loadEnv', () => {
   it('aceita ambiente mínimo e aplica os defaults', () => {
     const env = loadEnv(valido);
+    expect(env.LLM_PROVIDER).toBe('gemini');
+    expect(env.GEMINI_MODEL).toBe('gemini-2.0-flash');
     expect(env.ANTHROPIC_MODEL).toBe('claude-opus-5');
     expect(env.MAX_ANALYZABLE_SENTENCES).toBe(400);
     expect(env.RATE_LIMIT_PER_HOUR).toBe(10);
@@ -32,10 +43,36 @@ describe('loadEnv', () => {
     expect(env.METHODOLOGY_URL).toBe('/#metodo');
   });
 
-  it('LANÇA quando falta a chave da API', () => {
-    expect(() => loadEnv({})).toThrow(
+  it('LANÇA quando falta a chave do provedor escolhido', () => {
+    // Default é gemini, então é a chave DELE que falta.
+    expect(() => loadEnv({})).toThrow(/GEMINI_API_KEY/u);
+  });
+
+  it('exige a chave do provedor ESCOLHIDO, não das duas', () => {
+    // Quem usa Gemini não precisa de credencial da Anthropic. Exigir as duas
+    // pediria conta de um serviço que nunca vai ser chamado.
+    expect(() => loadEnv(valido)).not.toThrow();
+    resetEnvCache();
+    expect(() => loadEnv(validoAnthropic)).not.toThrow();
+  });
+
+  it('LANÇA quando o provedor é anthropic e falta a chave dela', () => {
+    expect(() => loadEnv({ LLM_PROVIDER: 'anthropic' })).toThrow(
       /ANTHROPIC_API_KEY/u,
     );
+  });
+
+  it('LANÇA quando o provedor não é um dos dois', () => {
+    expect(() =>
+      loadEnv({ ...valido, LLM_PROVIDER: 'openai' }),
+    ).toThrow(/LLM_PROVIDER/u);
+  });
+
+  it('permite trocar o modelo do Gemini por variável', () => {
+    // Qual modelo está na cota gratuita muda com o tempo — por isso é
+    // variável, e não constante no código.
+    const env = loadEnv({ ...valido, GEMINI_MODEL: 'gemini-2.5-flash' });
+    expect(env.GEMINI_MODEL).toBe('gemini-2.5-flash');
   });
 
   it('a mensagem de erro diz o que fazer', () => {
@@ -59,7 +96,7 @@ describe('loadEnv', () => {
   });
 
   it('permite trocar o tier do modelo por variável (OQ-1)', () => {
-    const env = loadEnv({ ...valido, ANTHROPIC_MODEL: 'claude-haiku-4-5' });
+    const env = loadEnv({ ...validoAnthropic, ANTHROPIC_MODEL: 'claude-haiku-4-5' });
     expect(env.ANTHROPIC_MODEL).toBe('claude-haiku-4-5');
   });
 

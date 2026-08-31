@@ -107,3 +107,42 @@ export const SUGGESTION_OUTPUT_FORMAT = {
     additionalProperties: false,
   },
 };
+
+/**
+ * O MESMO schema, na forma que a Generative Language API do Google aceita.
+ *
+ * Diferenças que NÃO são estilo — cada uma quebra a requisição se ignorada:
+ *  - Tipos em MAIÚSCULA (`OBJECT`, `ARRAY`), não `object`/`array`
+ *  - Não aceita `additionalProperties`; enviar rejeita com 400
+ *  - `propertyOrdering` é o que fixa a ordem das chaves na saída. Sem ele a
+ *    ordem varia entre chamadas, e variação gratuita é o oposto do que
+ *    `temperature: 0` existe para dar
+ *
+ * INVARIANTE: descreve a mesma estrutura de `ClassificationBatchSchema` e de
+ * `CLASSIFICATION_OUTPUT_FORMAT`. Há teste garantindo que os três não
+ * divirjam — se divergirem, um provedor passa a devolver algo que o Zod
+ * recusa, e o sintoma aparece como CLASSIFIER_INVALID_OUTPUT apontando para
+ * a causa errada.
+ */
+export const CLASSIFICATION_RESPONSE_SCHEMA_GEMINI = {
+  type: 'OBJECT' as const,
+  properties: {
+    items: {
+      type: 'ARRAY' as const,
+      items: {
+        type: 'OBJECT' as const,
+        properties: {
+          id: { type: 'INTEGER' as const },
+          category: {
+            type: 'STRING' as const,
+            enum: ['SOURCED', 'UNSOURCED', 'OPINION'],
+          },
+          confidence: { type: 'NUMBER' as const },
+        },
+        required: ['id', 'category', 'confidence'],
+        propertyOrdering: ['id', 'category', 'confidence'],
+      },
+    },
+  },
+  required: ['items'],
+};

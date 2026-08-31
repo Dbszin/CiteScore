@@ -13,14 +13,40 @@ const dollarsFromEnv = (fallback: number) =>
   z.coerce.number().positive().default(fallback);
 
 const EnvSchema = z.object({
-  ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY é obrigatória'),
+  /**
+   * Qual provedor classifica. `gemini` é o default porque tem cota gratuita
+   * real, e o produto precisa poder ficar público sem custo por análise.
+   *
+   * A troca é barata porque `ClaimClassifier` é uma PORTA (ADR-001): trocar de
+   * provedor é escrever um adapter, não reescrever o motor. O Claude continua
+   * inteiro e testado — é o caminho comprovado, e vira `LLM_PROVIDER=anthropic`.
+   */
+  LLM_PROVIDER: z.enum(['gemini', 'anthropic']).default('gemini'),
+
+  /*
+   * As chaves são OPCIONAIS no schema e exigidas depois, conforme o provedor
+   * escolhido (ver `superRefine` abaixo).
+   *
+   * Marcar as duas como obrigatórias faria quem usa Gemini precisar de uma
+   * chave da Anthropic para o boot passar — exigir credencial de um serviço
+   * que não vai ser chamado.
+   */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  GEMINI_API_KEY: z.string().min(1).optional(),
 
   /**
    * ADR-005 / OQ-1: ponto único de troca de tier.
-   * `claude-opus-5` é o default; descer de tier troca dinheiro por qualidade
-   * de classificação e é decisão do usuário, não da arquitetura.
+   * Descer de tier troca dinheiro por qualidade de classificação e é decisão
+   * do usuário, não da arquitetura.
    */
   ANTHROPIC_MODEL: z.string().min(1).default('claude-opus-5'),
+
+  /**
+   * O modelo do Gemini. Qual está na cota gratuita e com que limites MUDA com
+   * o tempo — por isso é variável de ambiente com default conservador, e não
+   * constante no código. Confira os limites atuais antes de contar com eles.
+   */
+  GEMINI_MODEL: z.string().min(1).default('gemini-2.0-flash'),
 
   /** Caps de conteúdo — defesa 2 de protecao-custo/spec.md. */
   MAX_CONTENT_BYTES: intFromEnv(2_000_000),
@@ -77,7 +103,27 @@ const EnvSchema = z.object({
   /** M4: contadores fora do processo. Ausente em dev — usa adapters locais. */
   REDIS_URL: z.string().optional(),
   REDIS_TOKEN: z.string().optional(),
-});
+})
+  /*
+   * A chave exigida é a do provedor ESCOLHIDO, e a falta dela derruba o boot
+   * com mensagem que diz qual falta — em vez de 500 na primeira análise real.
+   */
+  .superRefine((env, ctx) => {
+    if (env.LLM_PROVIDER === 'gemini' && env.GEMINI_API_KEY === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GEMINI_API_KEY'],
+        message: 'GEMINI_API_KEY é obrigatória quando LLM_PROVIDER=gemini',
+      });
+    }
+    if (env.LLM_PROVIDER === 'anthropic' && env.ANTHROPIC_API_KEY === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ANTHROPIC_API_KEY'],
+        message: 'ANTHROPIC_API_KEY é obrigatória quando LLM_PROVIDER=anthropic',
+      });
+    }
+  });
 
 export type Env = z.infer<typeof EnvSchema>;
 

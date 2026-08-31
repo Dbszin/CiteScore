@@ -9,7 +9,8 @@ import { UnlimitedBudgetGuard } from '../../../src/adapters/budget/unlimited-bud
 import { loadEnv, resetEnvCache } from '../../../src/adapters/config/env.js';
 
 const BASE = {
-  ANTHROPIC_API_KEY: 'chave-de-teste',
+  // O provedor default virou `gemini`, entao e' a chave DELE que o boot exige.
+  GEMINI_API_KEY: 'chave-de-teste',
   ANTHROPIC_MODEL: 'claude-haiku-4-5',
 };
 

@@ -90,6 +90,31 @@ describe('Mapa de status HTTP', () => {
     }
   });
 
+  it('cota esgotada NÃO manda tentar de novo', () => {
+    /*
+     * A razão de o código existir separado de CLASSIFIER_FAILED.
+     *
+     * "Tente novamente" é FALSO quando a cota acabou: tentar de novo falha
+     * igual, e o usuário fica clicando sem entender. Enquanto o classificador
+     * rodava em tier pago a confusão quase não aparecia; com free tier ela vira
+     * o modo de falha mais comum do dia.
+     *
+     * Se alguém colapsar as duas mensagens numa só para "simplificar", este
+     * teste reprova.
+     */
+    const cota = USER_MESSAGES.CLASSIFIER_QUOTA_EXHAUSTED;
+    expect(cota).not.toMatch(/tente novamente/iu);
+    expect(cota).not.toBe(USER_MESSAGES.CLASSIFIER_FAILED);
+    // E diz que a culpa não é de quem está lendo.
+    expect(cota).toMatch(/não é erro seu/iu);
+  });
+
+  it('cota esgotada é 503, não 429', () => {
+    // Mesma razão de BUDGET_EXCEEDED: a cota do provedor é GLOBAL. Responder
+    // 429 a quem fez uma única requisição afirma algo falso sobre ele.
+    expect(HTTP_STATUS.CLASSIFIER_QUOTA_EXHAUSTED).toBe(503);
+  });
+
   it('429 fica só onde o limite É do cliente', () => {
     // O rate limit é por IP: dizer "você fez requisições demais" é verdade.
     expect(HTTP_STATUS.RATE_LIMITED).toBe(429);

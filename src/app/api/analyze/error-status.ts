@@ -32,6 +32,10 @@ export const HTTP_STATUS: Record<AnalysisErrorCode, number> = {
   CLASSIFIER_FAILED: 502,
   CLASSIFIER_REFUSED: 422,
   CLASSIFIER_INVALID_OUTPUT: 502,
+  // 503, e nao 429, pela mesma razao de BUDGET_EXCEEDED: a cota do provedor e'
+  // GLOBAL, consumida por todos os visitantes somados. Responder 429 a quem fez
+  // uma unica requisicao afirma algo falso sobre o comportamento dele.
+  CLASSIFIER_QUOTA_EXHAUSTED: 503,
 
   // Guardas de custo.
   //

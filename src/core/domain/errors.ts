@@ -30,6 +30,7 @@ export type AnalysisErrorCode =
   | 'CLASSIFIER_FAILED'
   | 'CLASSIFIER_REFUSED'
   | 'CLASSIFIER_INVALID_OUTPUT'
+  | 'CLASSIFIER_QUOTA_EXHAUSTED'
   // guardas de custo
   | 'RATE_LIMITED'
   | 'BUDGET_EXCEEDED'
@@ -95,6 +96,21 @@ export const USER_MESSAGES: Record<AnalysisErrorCode, string> = {
   UNSUPPORTED_LANGUAGE:
     'No momento a análise cobre apenas conteúdo em português e inglês.',
   CLASSIFIER_FAILED: 'Falha ao analisar o conteúdo. Tente novamente.',
+  /*
+   * Cota do provedor esgotada — distinta de CLASSIFIER_FAILED, e a distinção
+   * é o ponto.
+   *
+   * "Tente novamente" é FALSO quando a cota acabou: tentar de novo vai falhar
+   * igual, e o usuário fica clicando sem entender. Enquanto o classificador
+   * rodava em tier pago essa confusão quase não aparecia; com free tier ela
+   * passa a ser o modo de falha mais comum do dia.
+   *
+   * A mensagem não promete horário exato porque a janela de cota do provedor
+   * não é necessariamente a meia-noite local de quem lê.
+   */
+  CLASSIFIER_QUOTA_EXHAUSTED:
+    'A cota de análises deste período foi atingida. Isto não é erro seu — ' +
+    'o serviço volta a analisar quando a cota renovar.',
   CLASSIFIER_REFUSED: 'Não foi possível analisar esse conteúdo.',
   CLASSIFIER_INVALID_OUTPUT:
     'Falha ao processar o resultado da análise. Tente novamente.',
