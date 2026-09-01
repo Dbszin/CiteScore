@@ -57,6 +57,34 @@ export const OPINION_KINDS: readonly SignalKind[] = [
   'opinion_adjective',
 ];
 
+/**
+ * TODOS os tipos, em tempo de execucao.
+ *
+ * `SignalKind` e' um tipo, e tipo nao existe depois da compilacao — entao nao
+ * havia como um teste perguntar "a pagina de metodologia lista todos os
+ * sinais?". O `Record<SignalKind, true>` resolve: acrescentar um tipo a uniao
+ * QUEBRA A COMPILACAO ate' ser acrescentado aqui tambem.
+ *
+ * E' o mesmo mecanismo que `HTTP_STATUS` usa para o mapa de erro, e pela mesma
+ * razao: um caso novo escapando por omissao e' o tipo de degradacao que
+ * ninguem percebe.
+ */
+const COBERTURA_DE_TIPOS: Record<SignalKind, true> = {
+  source_quantity: true,
+  source_date: true,
+  source_attribution: true,
+  source_quote: true,
+  opinion_first_person: true,
+  opinion_imperative: true,
+  opinion_adjective: true,
+  hedge_modal: true,
+  hedge_vague_quantifier: true,
+  hedge_false_authority: true,
+  attribution_disqualifier: true,
+};
+
+export const ALL_SIGNAL_KINDS = Object.keys(COBERTURA_DE_TIPOS) as SignalKind[];
+
 export const HEDGE_KINDS: readonly SignalKind[] = [
   'hedge_modal',
   'hedge_vague_quantifier',

@@ -146,7 +146,7 @@ export default function Home() {
           <nav className="topnav" aria-label="Seções">
             <a href="#para-que-serve">Para que serve</a>
             <a href="#como-funciona">Como funciona</a>
-            <a href="#metodo">Método</a>
+            <a href="/metodologia">Método</a>
             <a href={REPO} target="_blank" rel="noopener noreferrer">
               Código
               <ExternalLink />
@@ -284,15 +284,12 @@ export default function Home() {
                 A fórmula, os pesos e as limitações são públicos.
               </p>
               {/*
-                Aponta para a raiz do repositorio, que renderiza o README — ele
-                carrega a referencia do paper de GEO e o metodo. A ancora
-                `#metodologia` NAO existe e nunca deve ser usada aqui.
+                A pagina `/metodologia` agora EXISTE e cumpre os tres itens da
+                ADR-004: quais sinais, como o score e' calculado, o que nao foi
+                medido. Antes este link ia para o repositorio, por falta dela.
               */}
               <p className="small" style={{ marginTop: 'var(--space-6)' }}>
-                <a href={REPO} target="_blank" rel="noopener noreferrer">
-                  Ler o método e a pesquisa citada
-                  <ExternalLink />
-                </a>
+                <a href="/metodologia">Ler a metodologia completa →</a>
               </p>
             </div>
 

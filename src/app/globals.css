@@ -1305,6 +1305,20 @@ mark {
   color: var(--text-dim);
 }
 
+/* Lista de sinais na pagina de metodologia. */
+.ledger-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ledger-lista li {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
 /* ==========================================================================
    Seção: os três lápis
    ========================================================================== */

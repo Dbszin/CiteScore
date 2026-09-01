@@ -619,19 +619,20 @@ Implementa `specs/ui-relatorio/design-visual-2.md`, que supersede
 
 - [x] **O nome do autor no rodapé.** Preenchido pelo usuário no site e no
       README. O código nunca o inventou, que era o ponto.
-- [ ] 🔴 **A rota `/metodologia` NUNCA EXISTIU, e a ADR-004 item 4 exige que a
-      metodologia esteja a um clique do resultado.** O `METHODOLOGY_URL` tinha
-      default `/metodologia`, então o link "Ler o método" no painel de
-      resultado dava 404. Achado nesta rodada, mas o defeito é anterior a ela.
-      - Mitigado: o default virou `/#metodo`, a seção da página, que existe.
-      - **NÃO resolvido:** a seção não lista os sinais do pré-filtro nem a
-        fórmula do score. A ADR-004 pede "quais sinais, como o score é
-        calculado, o que não foi medido" — só o terceiro está lá.
-      - **Ação do usuário:** `.env.local` tem `METHODOLOGY_URL=/metodologia`
-        escrito à mão e sobrepõe o default. Precisa virar `/#metodo`, senão o
-        404 continua em local e em qualquer deploy que copie esse arquivo.
-      - Pendente de decisão: página `/metodologia` dedicada é rota nova e não
-        está em nenhuma spec. Precisa do Architect antes do Engineer.
+- [x] ✅ **A rota `/metodologia` EXISTE e cumpre os três itens da ADR-004 item 4**
+      — quais sinais, como o score é calculado, o que não foi medido. Fechada em
+      2026-09-01.
+      - A página é gerada a partir do código: pesos, limiares, lista de sinais e
+        a ressalva vêm de `import`, não de texto digitado. Uma página de
+        metodologia que repete valores à mão é a próxima a ficar desatualizada,
+        e aqui o erro seria caro — ela é a fonte de verdade sobre o método.
+      - `ALL_SIGNAL_KINDS` nasceu para isso: `SignalKind` é um tipo, e tipo não
+        existe em execução, então não havia como um teste perguntar "a página
+        lista todos os sinais?". O `Record<SignalKind, true>` faz acrescentar um
+        tipo à união QUEBRAR A COMPILAÇÃO até ele ser listado.
+      - `METHODOLOGY_URL` volta a apontar para `/metodologia`. O default já
+        apontou para lá quando a rota não existia (404) e depois para `/#metodo`,
+        uma seção que cobria só o terceiro item.
 - [x] O link da seção "O que não medimos" aponta para `specs/decisions/` no
       repositório. O anterior mirava `#metodologia` num README que não existe.
 - [ ] **Drawer mobile não implementado.** A spec § 12 o especifica; a topbar

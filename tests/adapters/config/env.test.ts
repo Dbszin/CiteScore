@@ -40,7 +40,7 @@ describe('loadEnv', () => {
     // método" no painel de resultado dava 404, e a ADR-004 item 4 exige a
     // metodologia a um clique do resultado. O default virou a seção da própria
     // página, que existe. A página dedicada segue como débito em tasks.md.
-    expect(env.METHODOLOGY_URL).toBe('/#metodo');
+    expect(env.METHODOLOGY_URL).toBe('/metodologia');
   });
 
   it('LANÇA quando falta a chave do provedor escolhido', () => {
