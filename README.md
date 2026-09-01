@@ -56,6 +56,8 @@ Juízo de valor, marcado como tal. Não é defeito.
 
 A cor nunca é o único canal: cada categoria tem traço próprio, legível em escala de cinza, em daltonismo e em impressão preto e branco.
 
+**E quando ele mede só parte da página, ele diz.** Título, item de lista curto e fragmento sem verbo não são afirmações, e ficam fora da conta. Se sobrar menos da metade dos blocos, a tela avisa com os números — *"classificamos 38 dos 94 blocos (40%); as proporções descrevem a parte classificada, não a página inteira"*. O limiar veio de medição: os artigos do corpus ficam entre 0,545 e 0,667 de blocos analisáveis, e as landing pages que escorregam pela guarda ficam entre 0,397 e 0,463.
+
 <br>
 
 ## Como funciona
@@ -133,9 +135,21 @@ npm run dev
 
 Abre em `http://localhost:3000`. A única variável obrigatória é a chave do provedor escolhido — todo o resto tem default.
 
-O classificador roda sobre **Gemini** por padrão, porque tem cota gratuita real. Trocar para Claude é `LLM_PROVIDER=anthropic`: `ClaimClassifier` é uma porta, então o provedor é um adapter e não uma reescrita.
+O classificador roda sobre **Gemini** por padrão, porque tem cota gratuita. Trocar para Claude é `LLM_PROVIDER=anthropic`: `ClaimClassifier` é uma porta, então o provedor é um adapter e não uma reescrita.
+
+> [!IMPORTANT]
+> **Quanto a cota gratuita dá, medido.** O cabeçalho de cota da própria API do Gemini reporta `GenerateRequestsPerDayPerProjectPerModel-FreeTier = 20` — vinte requisições por dia, por modelo. Uma análise de artigo típico consome duas (o classificador manda em lotes de 80 sentenças), então são **cerca de 10 análises por dia**.
+>
+> Isso basta para desenvolver e, com a vitrine semeada, para uma demonstração pública. Não basta para tráfego sustentado. O Claude não tem free tier, mas com o teto padrão de US$ 1/dia rende cerca de 64 análises — a escolha é entre custo zero e volume.
 
 Em produção, `REDIS_URL` e `REDIS_TOKEN` passam a ser obrigatórias: a presença das duas é o que seleciona os adapters de produção, e sem elas o container falha alto de propósito em vez de rodar com contadores em memória que não sobrevivem a múltiplas instâncias.
+
+### Vitrine e cache
+
+Duas coisas fazem a cota render, e as duas usam o mesmo mecanismo:
+
+- **Cache por URL**, compartilhado entre todos os visitantes. A mesma URL analisada duas vezes paga uma. Um botão *"Analisar de novo"* ignora o guardado, para quem editou o texto e voltou conferir.
+- **Vitrine**: `npx tsx scripts/semear-vitrine.ts` mede os artigos em destaque uma vez e os guarda com prazo de 30 dias. Eles passam a responder em milissegundos sem gastar requisição, deixando a cota inteira para quem traz um texto próprio.
 
 <details>
 <summary><strong>Todas as variáveis de ambiente</strong></summary>
