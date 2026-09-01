@@ -1,7 +1,8 @@
 {
   "name": "citescore",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.11"

@@ -238,7 +238,7 @@ src/
 │
 ├── adapters/                tudo que toca o mundo
 │   ├── budget/              teto de gasto, com reserva e liquidação
-│   ├── classify/            Anthropic + o detector de sinais
+│   ├── classify/            Gemini ou Anthropic + o detector de sinais
 │   ├── extract/             Readability sobre jsdom ou linkedom
 │   ├── fetch/               undici com validação de endereço no DNS
 │   ├── ratelimit/  redis/   contadores fora do processo
@@ -252,6 +252,10 @@ src/
 > **A fronteira não é convenção, é trava.** Uma regra de ESLint (`no-restricted-imports`) mais um teste de varredura estática impedem `core/` de importar de `adapters/`. Quebrar isso reprova o build, não uma revisão de código.
 
 `src/components/report-model.ts` decide **o que** a tela pode exibir — sem React, testado sem DOM. O componente só desenha o que aquele modelo entrega.
+
+## Licença
+
+[MIT](LICENSE). Use, modifique, publique, cobre por isso — só mantenha o aviso de copyright.
 
 <p align="center">
   <sub>Construído por <strong>Douglas Batista</strong></sub>

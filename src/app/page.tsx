@@ -350,7 +350,12 @@ export default function Home() {
             Placeholder deliberado. O nome do autor não é inventado pelo código:
             quem publica preenche.
           */}
-          <span>Construído por Douglas Batista · 2026</span>
+          <span>
+            Construído por Douglas Batista · 2026 ·{' '}
+            <a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer">
+              MIT
+            </a>
+          </span>
           <a href="#analisar">
             Analisar um artigo
             <ArrowUp size={14} />
