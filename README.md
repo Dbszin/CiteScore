@@ -77,25 +77,29 @@ A cor nunca é o único canal: cada categoria tem traço próprio, legível em e
 
 ## O que ele encontra
 
-Calibração sobre três artigos de referência do nicho:
+Dois artigos de referência, medidos com o classificador atual:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  3 artigos  ·  331 afirmações analisadas                         │
+│                          COM FONTE       SEM FONTE               │
 ├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   Ahrefs · meta tags     ███░░░░░░░░░░░░░░░░░   15% com fonte    │
-│   Moz · o que é SEO      █████░░░░░░░░░░░░░░░   23% com fonte    │
-│   MDN · introdução a JS  ████░░░░░░░░░░░░░░░░   21% com fonte    │
-│                                                                  │
+│   Moz · o que é SEO        █  2%      ████████████████  80%      │
+│   MDN · introdução a JS    ██ 6%      █████████████████ 85%      │
 ├──────────────────────────────────────────────────────────────────┤
-│  Afirmações SEM fonte      72%   ·   72%   ·   76%               │
+│   Das afirmações factuais, sem fonte:     98%   ·   93%          │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Três artigos, três autores, três tipos de texto — e em todos eles cerca de **3 em cada 4 afirmações factuais seguem sem fonte**. É esse padrão que o texto marcado expõe frase a frase, e é isso que dá para corrigir antes de publicar.
+Dois artigos, dois autores, dois tipos de texto — e em ambos **quase toda afirmação factual segue sem citar fonte**. É esse padrão que o texto marcado expõe frase a frase, e é isso que dá para corrigir antes de publicar.
 
-<sub>Percentuais da calibração de 2026-08-28, com <code>claude-haiku-4-5</code>. A versão atual fixa <code>temperature: 0</code> e o corpus não foi remedido desde então.</sub>
+> [!NOTE]
+> **Estes números substituem uma medição anterior que estava inflada, e a correção vale ser contada.**
+>
+> A calibração de agosto usava `claude-haiku-4-5` e encontrava 21-23% de afirmações com fonte. Ao trocar o classificador, o número caiu para 2-6%. A divergência foi investigada sentença por sentença, e o classificador antigo estava **contando menção a entidade nomeada como se fosse atribuição** — chamava de "com fonte" frases como *"SEO stands for search engine optimization"*, *"MozBar: a browser extension showing SEO metrics"* e *"Loading performance is how fast your page content appears (Largest Contentful Paint)"*. Nenhuma cita fonte alguma; o parêntese é um nome, não uma referência.
+>
+> É o mesmo erro que a decisão sobre o pré-filtro já havia registrado num outro ponto — **data não é fonte** — reaparecendo como **nome de produto não é fonte**.
+>
+> O terceiro artigo do corpus (Ahrefs) ainda não foi remedido, então não está na tabela.
 
 <br>
 
