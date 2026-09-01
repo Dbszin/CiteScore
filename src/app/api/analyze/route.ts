@@ -4,6 +4,7 @@ import type { AnalysisErrorCode } from '../../../core/domain/errors.js';
 import { isAnalysisError, USER_MESSAGES } from '../../../core/domain/errors.js';
 import { clientKeyFrom } from './client-key.js';
 import { HTTP_STATUS } from './error-status.js';
+import { paraLogSeguro } from './log-seguro.js';
 import { readIncludeSuggestions, readRefresh } from './request-body.js';
 
 /**
@@ -108,7 +109,15 @@ export async function POST(request: Request): Promise<Response> {
     // Erro não previsto. O log fica no servidor; o cliente recebe um corpo
     // genérico. Vazar stack para um endpoint público anônimo entrega mapa
     // da aplicação a quem estiver sondando.
-    console.error('[citescore] erro não tratado em POST /api/analyze', error);
+    //
+    // `paraLogSeguro` tira a URL do visitante antes de registrar. A versão
+    // anterior passava o objeto cru, e erro de rede costuma trazer o endereço
+    // na mensagem — dado de usuário indo parar em log de plataforma, com
+    // retenção e alcance que não controlamos.
+    console.error(
+      '[citescore] erro não tratado em POST /api/analyze',
+      paraLogSeguro(error),
+    );
     return NextResponse.json(unexpectedError(), { status: 500 });
   }
 }

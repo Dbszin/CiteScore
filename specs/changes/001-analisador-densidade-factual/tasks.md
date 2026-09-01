@@ -556,8 +556,8 @@ Critério de teste conforme `conventions.md` § TDD Skip Criteria. Tudo aqui tem
 
 - [ ] `npm run lint`
 - [ ] `npm run typecheck`
-- [ ] `npm run test`
-- [ ] `npm run build`
+- [x] `npm run test` — 666 testes, 37 arquivos
+- [x] `npm run build`
 - [ ] `npx tsx scripts/calibrate.ts` — relatório de calibração gerado
 - [ ] Manual: analisar 3 artigos reais em PT-BR do início ao fim pela UI
 - [ ] Manual: provocar cada modo de falha de extração e ler a mensagem como um usuário leria
@@ -566,10 +566,11 @@ Critério de teste conforme `conventions.md` § TDD Skip Criteria. Tudo aqui tem
 
 ## Documentation
 
-- [ ] `README.md` — o que é, como rodar, variáveis de ambiente
+- [x] `README.md` — o que é, como rodar, variáveis de ambiente, e a cota medida
 - [ ] Consolidar em `specs/living/` ao concluir o change
 - [ ] Long-Term Manager atualiza `docs/session-log.md` e `docs/context-resume.md` ao fim de cada sessão
-- [ ] Registrar a política de log de URL antes do deploy público
+- [x] Registrar a política de log de URL antes do deploy público — decidida,
+      implementada em `src/app/api/analyze/log-seguro.ts` e travada por teste
 
 ---
 
@@ -616,8 +617,8 @@ Implementa `specs/ui-relatorio/design-visual-2.md`, que supersede
 
 ### Débito registrado, NÃO feito nesta rodada
 
-- [ ] **O nome do autor no rodapé é o placeholder `[NOME DO AUTOR]`.** Precisa
-      do usuário; o código não inventa.
+- [x] **O nome do autor no rodapé.** Preenchido pelo usuário no site e no
+      README. O código nunca o inventou, que era o ponto.
 - [ ] 🔴 **A rota `/metodologia` NUNCA EXISTIU, e a ADR-004 item 4 exige que a
       metodologia esteja a um clique do resultado.** O `METHODOLOGY_URL` tinha
       default `/metodologia`, então o link "Ler o método" no painel de
@@ -711,3 +712,40 @@ compressão de régua que já trava o composto (emenda da ADR-007).
       parcialmente, o usuário não é avisado. Considerar aviso quando a razão de
       analisáveis for baixa mas acima do limiar da guarda — a informação já
       existe em `IndexPageAssessment.analyzableRatio` e não é exibida.
+
+## Política de log de URL — decidida em 2026-09-01
+
+O item pedia "registrar a política antes do deploy público". Registrada, e com
+o levantamento que a motivou.
+
+**O que foi verificado, ponto a ponto:**
+
+| ponto de log | escreve a URL do visitante? |
+|---|---|
+| `ConsoleCostRecorder` (dev) | não — modelo e tokens |
+| `RedisCostRecorder` (prod) | não — modelo, tokens e custo |
+| `RedisBudgetGuard` | não — a chave é `citescore:...:<data>` |
+| **`catch` final de `route.ts`** | **podia** — registrava o objeto de erro inteiro |
+
+Um vetor só, e justamente o caminho de erro inesperado: erro de rede costuma
+trazer o endereço na mensagem, e a pilha é o esconderijo fácil, porque ninguém
+pensa nela ao revisar um log.
+
+**A política:**
+
+1. **A URL enviada pelo visitante não vai para o log.** Vale para mensagem e
+   para pilha. Implementado em `log-seguro.ts`, com teste — combinado de equipe
+   não sobrevive a uma dependência atualizada que passe a incluir o endereço
+   onde antes não incluía.
+2. **Nome, mensagem e pilha continuam sendo registrados**, filtrados. Registrar
+   nada trocaria um defeito por outro: falha em produção sem log é falha que
+   ninguém conserta.
+3. **O que É guardado, e onde:** a análise fica no Redis com a URL na chave, por
+   24 horas — 30 dias nos artigos em destaque. Nada sobre QUEM pediu é
+   armazenado. Isso é diferente de espalhar a URL em log de plataforma, cuja
+   retenção e alcance não controlamos, e está dito no README.
+
+**O que esta política NÃO é:** anonimato. O risco aqui é modesto — o produto só
+aceita página pública e recusa o que está atrás de login. Mas dado de usuário em
+log de terceiro é uma escolha, e escolha merece ser feita de propósito em vez de
+por omissão.

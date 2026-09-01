@@ -182,6 +182,17 @@ Duas coisas fazem a cota render, e as duas usam o mesmo mecanismo:
 
 <br>
 
+## O que ele guarda
+
+Curto, porque é curto de verdade.
+
+- **A análise fica no Redis por 24 horas**, com a URL na chave — 30 dias nos artigos em destaque. É o que faz a mesma URL não ser paga duas vezes.
+- **Nada sobre quem pediu é armazenado.** Não há conta, não há sessão, e o IP serve só para o limite de 10 por hora, num contador que expira.
+- **A URL que você envia não vai para o log.** Nem na mensagem de erro, nem na pilha. Isso é código com teste, não combinado: erro de rede costuma trazer o endereço na mensagem, e uma biblioteca atualizada pode passar a trazer onde antes não trazia.
+- **Nome, mensagem e pilha dos erros continuam sendo registrados**, filtrados. Falha em produção sem log é falha que ninguém conserta.
+
+<br>
+
 ## Scripts
 
 | Comando | O que faz |
