@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Analysis } from '../../src/core/domain/analysis.js';
+import { DISCLAIMER_PT_BR } from '../../src/core/domain/methodology.js';
 import { createAnalyzeUrl } from '../../src/core/usecases/analyze-url.js';
 import type { AnalysisCache } from '../../src/core/ports/analysis-cache.js';
 import { makeHarness, StubRateLimiter } from '../helpers/stub-ports.js';
@@ -55,6 +56,58 @@ describe('Cache no pipeline — acerto', () => {
     expect(calls2).not.toContain('fetch');
     expect(calls2).not.toContain('classify');
     expect(calls).toContain('fetch');
+  });
+
+  /*
+   * ADR-004: A RESSALVA NAO PODE ENVELHECER DENTRO DO CACHE.
+   *
+   * A ADR-004 lista tres modos pelos quais a ressalva morre — redesign, print
+   * cortado, landing page nova. Este e' um quarto, e foi encontrado rodando o
+   * produto em modo producao: a analise inteira e' guardada, bloco de
+   * metodologia junto. Corrigir `METHODOLOGY_URL` no codigo nao alcanca quem
+   * recebe resposta do cache.
+   *
+   * Nao e' hipotetico. `METHODOLOGY_URL` ja apontou para `/metodologia` quando
+   * a rota nao existia (404), depois para `/#metodo` (uma secao que cobria um
+   * dos tres itens que a ADR-004 exige), e hoje para a pagina de verdade. As
+   * tres entradas da vitrine — o primeiro clique de qualquer visitante —
+   * estavam servindo `/#metodo`, com prazo de trinta dias.
+   *
+   * A distincao que resolve: o cache existe para nao remedir. Metodologia nao
+   * e' medicao, e' afirmacao sobre o build que responde AGORA. Guarda-se o
+   * numero; declara-se o contrato.
+   */
+  it('acerto de cache serve a metodologia ATUAL, nao a guardada', async () => {
+    const { deps } = makeHarness();
+    const antiga: Analysis = {
+      ...(await createAnalyzeUrl(deps)(INPUT)),
+      // Valor que o harness nao produz sozinho: sem isso, a assercao de que a
+      // medicao sobrevive comparava o resultado com ele mesmo e passava
+      // mesmo com a medicao sendo zerada na volta do cache.
+      outcome: { kind: 'scored', score: 77 },
+      methodology: {
+        kind: 'heuristic_proxy',
+        measuredCitations: false,
+        disclaimer: 'ressalva de uma versao anterior',
+        methodologyUrl: '/#metodo',
+      },
+    };
+
+    // Destino DIFERENTE do default do harness: um valor cravado no codigo
+    // passaria pela versao anterior deste teste sem seguir a configuracao.
+    const { deps: deps2 } = makeHarness();
+    const { cache } = cacheEspiao(antiga);
+    const resultado = await createAnalyzeUrl({
+      ...deps2,
+      analysisCache: cache,
+      config: { ...deps2.config, methodologyUrl: '/metodologia-v2' },
+    })(INPUT);
+
+    expect(resultado.methodology.methodologyUrl).toBe('/metodologia-v2');
+    expect(resultado.methodology.disclaimer).toBe(DISCLAIMER_PT_BR);
+    // A medicao guardada continua intacta: so' o contrato foi renovado.
+    expect(resultado.outcome).toEqual({ kind: 'scored', score: 77 });
+    expect(resultado.breakdown).toEqual(antiga.breakdown);
   });
 
   it('o acerto acontece DEPOIS do rate limit', async () => {

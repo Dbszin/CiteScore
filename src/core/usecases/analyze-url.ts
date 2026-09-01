@@ -108,7 +108,34 @@ export function createAnalyzeUrl(
 
     if (deps.analysisCache !== undefined && input.refresh !== true) {
       const guardada = await deps.analysisCache.get(cacheKey);
-      if (guardada !== null) return guardada;
+      if (guardada !== null) {
+        /*
+         * A METODOLOGIA E' REDECLARADA, NUNCA SERVIDA DO CACHE.
+         *
+         * A ADR-004 faz da ressalva um campo obrigatório do contrato para que
+         * ela não dependa de ninguém lembrar de exibi-la. O cache abre um
+         * caminho por onde ela envelhece mesmo assim: a análise inteira é
+         * guardada, bloco de metodologia junto, e uma correção no código não
+         * alcança quem recebe resposta guardada.
+         *
+         * Encontrado rodando em modo produção: as três entradas da vitrine
+         * serviam `methodologyUrl: '/#metodo'` — uma seção que cobre um dos
+         * três itens que a ADR-004 exige — enquanto o código já apontava para
+         * a página `/metodologia`, que cobre os três. Prazo de trinta dias.
+         *
+         * A separação que resolve: o cache existe para não REMEDIR. A
+         * metodologia não é medição — é o que este build afirma sobre o que
+         * mediu e o que não mediu. Guarda-se o número; declara-se o contrato.
+         *
+         * Vale para `DISCLAIMER_PT_BR` na mesma medida: emendar o texto passa
+         * a alcançar todo mundo na resposta seguinte, e não conforme as
+         * entradas expiram.
+         */
+        return {
+          ...guardada,
+          methodology: buildMethodology(deps.config.methodologyUrl),
+        };
+      }
     }
 
     // ─── 3. Fetch e extração ──────────────────────────────────────────
