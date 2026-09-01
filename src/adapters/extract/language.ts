@@ -7,8 +7,21 @@ import type { SupportedLanguage } from '../../core/domain/extracted-content.js';
  * enquanto o `@extractus/article-extractor` retornou `null` em 7/7. Esse é
  * um dos motivos medidos para manter o Readability como primário.
  *
- * A heurística de stopwords é fallback para quando o atributo está ausente
- * ou mente.
+ * A heurística de stopwords é fallback para quando o atributo está AUSENTE —
+ * e só para isso. `detectLanguage` retorna na primeira tag declarada válida e
+ * nunca consulta o texto quando existe uma. Uma tag que MENTE passa.
+ *
+ * O comentário aqui afirmava que a heurística cobria a mentira também. Não
+ * cobria, e a diferença apareceu num fixture do corpus: `neilpatel.com/br/seo/`
+ * declara `lang="en"`. Ao investigar, medi as stopwords de todos os sete
+ * fixtures — e a heurística diz `en` para esse também, porque o conteúdo
+ * servido naquela URL É inglês. A tag não mentia; o fixture é que era outro
+ * artigo.
+ *
+ * Por isso a preferência não foi invertida. Trocar a ordem para o texto vencer
+ * a tag não teria corrigido o único caso que motivou a suspeita, e teria
+ * arriscado os seis restantes, onde declaração e texto concordam. O que o
+ * corpus precisava era de uma guarda de fixture — está em `calibrate.ts`.
  */
 
 const PT_STOPWORDS = [

@@ -240,6 +240,42 @@ for (const record of index) {
 
   try {
     const content = await extractor.extract(page);
+
+    /*
+     * O TEXTO CERTO, NAO SO' TEXTO SUFICIENTE.
+     *
+     * A guarda de `fetch-corpus.ts` pega fixture VAZIO. Nao pega fixture
+     * TROCADO: `neilpatel.com/br/seo/` baixa 326 KB, passa folgado no piso de
+     * mil caracteres, e serve uma pagina institucional em ingles no lugar do
+     * artigo de SEO em portugues que a entrada pretendia.
+     *
+     * Custou mais que uma linha errada na tabela: medi-lo como "marketing em
+     * pt-BR" sustentou a conclusao de que o padrao do corpus atravessava
+     * idioma. Nao atravessava — os dois lados eram o mesmo idioma.
+     *
+     * O corpus declara o idioma esperado de cada entrada. O extrator detecta o
+     * idioma do que veio. Discordancia na subtag primaria significa que uma das
+     * duas coisas esta errada, e nenhuma delas merece uma chamada de LLM: a
+     * guarda vem ANTES de gastar cota, nao depois.
+     */
+    const esperado = entry.lang.split('-')[0]?.toLowerCase() ?? '';
+    const veio = content.language.split('-')[0]?.toLowerCase() ?? '';
+    if (esperado !== veio) {
+      linhas.push({
+        id: entry.id, tipo: entry.tipo, lang: content.language,
+        palavras: content.wordCount, sentencas: 0,
+        analisaveis: 0, escalados: 0, taxa: 0,
+        sourced: 0, unsourced: 0, opinion: 0, score: 'IDIOMA_DIVERGENTE',
+        custo: 0, cacheRead: 0,
+        erro: `corpus espera ${entry.lang}, conteudo e' ${content.language}`,
+      });
+      console.log(
+        `${entry.id.padEnd(24)} IDIOMA_DIVERGENTE espera ${entry.lang}, ` +
+        `veio ${content.language} — fixture trocado, nao medido`,
+      );
+      continue;
+    }
+
     const sentences = segmenter.segment(content);
     const indexPage = assessIndexPage(sentences);
 

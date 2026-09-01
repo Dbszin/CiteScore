@@ -85,6 +85,17 @@ export const CORPUS: readonly CorpusEntry[] = [
   },
   {
     id: 'pt-seo-neilpatel',
+    // ⚠️ A URL MUDOU DE CONTEUDO. Verificado em 2026-09-01: `/br/seo/` serve
+    // hoje uma pagina institucional EM INGLES — "How to Rank Your Ecommerce
+    // Store on Google", com texto de agencia — e nao o artigo de SEO em
+    // portugues que esta entrada pretendia.
+    //
+    // O fixture BAIXA bem (326 KB, texto de sobra), entao a guarda de soft 404
+    // nao o pega: o problema nao e' falta de conteudo, e' conteudo TROCADO.
+    // Dai a guarda de idioma acrescentada em `calibrate.ts`.
+    //
+    // Medi-lo como "marketing em pt-BR" produziu uma conclusao errada sobre o
+    // corpus atravessar idioma. Fica registrado.
     url: 'https://neilpatel.com/br/seo/',
     lang: 'pt-BR',
     tipo: 'MIX',
