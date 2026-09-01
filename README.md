@@ -77,20 +77,28 @@ A cor nunca é o único canal: cada categoria tem traço próprio, legível em e
 
 ## O que ele encontra
 
-Dois artigos de referência, medidos com o classificador atual:
+Três artigos de referência, medidos com o classificador atual:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                          COM FONTE       SEM FONTE               │
+│                                    COM FONTE    SEM FONTE(*)     │
 ├──────────────────────────────────────────────────────────────────┤
-│   Moz · o que é SEO        █  2%      ████████████████  80%      │
-│   MDN · introdução a JS    ██ 6%      █████████████████ 85%      │
+│   Ahrefs · meta tags                 ███ 13%        80%          │
+│   post de blog, cita de verdade                                  │
+│                                                                  │
+│   MDN · introdução a JavaScript      ██   6%        93%          │
+│   documentação técnica                                           │
+│                                                                  │
+│   Moz · o que é SEO                  █    2%        98%          │
+│   página pilar, muito definicional                               │
 ├──────────────────────────────────────────────────────────────────┤
-│   Das afirmações factuais, sem fonte:     98%   ·   93%          │
+│   (*) das AFIRMAÇÕES — opinião fora do denominador               │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Dois artigos, dois autores, dois tipos de texto — e em ambos **quase toda afirmação factual segue sem citar fonte**. É esse padrão que o texto marcado expõe frase a frase, e é isso que dá para corrigir antes de publicar.
+Três autores, três tipos de texto. Mesmo no melhor dos casos — um post que de fato cita fontes — **4 em cada 5 afirmações factuais seguem sem sustentação**. Nos outros dois, quase todas.
+
+O padrão também é informativo: quanto mais definicional o texto, menos ele cita. É esse mapa que o texto marcado expõe frase a frase, e é isso que dá para corrigir antes de publicar.
 
 > [!NOTE]
 > **Estes números substituem uma medição anterior que estava inflada, e a correção vale ser contada.**
@@ -99,7 +107,7 @@ Dois artigos, dois autores, dois tipos de texto — e em ambos **quase toda afir
 >
 > É o mesmo erro que a decisão sobre o pré-filtro já havia registrado num outro ponto — **data não é fonte** — reaparecendo como **nome de produto não é fonte**.
 >
-> O terceiro artigo do corpus (Ahrefs) ainda não foi remedido, então não está na tabela.
+> A divergência **não é uniforme**, e isso é o mais revelador: no artigo da Ahrefs, um post que cita de verdade, os dois classificadores praticamente concordam (13% contra 15%). O erro antigo aparecia justamente em texto **definicional e em lista de produto**, onde entidade nomeada abunda e era confundida com atribuição.
 
 <br>
 
@@ -173,6 +181,7 @@ Em produção, `REDIS_URL` e `REDIS_TOKEN` passam a ser obrigatórias: a presen�
 | `npx tsx scripts/reprodutibilidade.ts` | Roda o mesmo artigo N vezes e compara |
 | `npx tsx scripts/measure-extraction.ts` | Extração e segmentação sobre os fixtures |
 | `npx tsx scripts/smoke-gemini.ts` | Uma chamada real ao Gemini, para provar a integração |
+| `npx tsx scripts/semear-vitrine.ts` | Semeia os artigos em destaque no cache, com prazo longo |
 
 <br>
 
