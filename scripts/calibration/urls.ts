@@ -69,6 +69,15 @@ export const CORPUS: readonly CorpusEntry[] = [
   // ─── PT-BR ─────────────────────────────────────────────────────────────
   {
     id: 'pt-seo-rdstation',
+    // ⚠️ SOFT 404: esta URL responde HTTP 200 com uma pagina "404: This
+    // page could not be found". O conteudo saiu do ar sem o servidor
+    // admitir. Verificado de novo em 2026-09-01 — segue 200 com 28 KB de
+    // casca, contra 200-800 KB dos outros fixtures.
+    //
+    // Fica na lista com o aviso, e nao removida, porque ela e' o caso que
+    // motivou a guarda de corpo minimo em `fetch-corpus.ts`. Substituir
+    // por outro artigo de SEO em PT-BR e' escolha de corpus, e merece ser
+    // feita de proposito em vez de no meio de um conserto.
     url: 'https://resultadosdigitais.com.br/blog/o-que-e-seo/',
     lang: 'pt-BR',
     tipo: 'MIX',
@@ -104,7 +113,11 @@ export const CORPUS: readonly CorpusEntry[] = [
   },
   {
     id: 'pt-lista-rios',
-    url: 'https://pt.wikipedia.org/wiki/Lista_dos_maiores_rios_do_Brasil',
+    // A URL anterior (Lista_dos_maiores_rios_do_Brasil) devolve 404 — o
+    // indice do corpus registrava isso honestamente e o artigo nunca foi
+    // baixado. Esta responde 200 com 158 KB, e serve ao mesmo proposito:
+    // uma pagina de LISTA-TABELA em portugues.
+    url: 'https://pt.wikipedia.org/wiki/Lista_de_rios_do_Brasil',
     lang: 'pt-BR',
     tipo: 'LISTA-TABELA',
     expectativa: 'stress test PT-BR de lista/tabela',

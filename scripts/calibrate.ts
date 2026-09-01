@@ -73,6 +73,8 @@ interface IndexRecord {
   entry: CorpusEntry;
   file: string | null;
   finalUrl: string | null;
+  /** Preenchido quando o fixture e' ruim — ver a guarda em fetch-corpus.ts. */
+  readonly error: string | null;
 }
 
 function custoDe(usage: ClassifierUsage | null, model: string): number {
@@ -179,12 +181,22 @@ console.log(`Teto de gasto: US$ ${TETO_DOLARES.toFixed(2)}\n`);
 for (const record of index) {
   const { entry } = record;
 
-  if (record.file === null) {
+  /*
+   * Pula sem fixture E pula fixture MARCADO como ruim.
+   *
+   * A segunda condicao e' nova, e sem ela a marca nao teria consequencia: o
+   * soft 404 do RD Station tem arquivo salvo, entao a versao anterior o
+   * processava e gastava uma requisicao de LLM numa casca de 68 caracteres.
+   * Num free tier de 20 por dia, isso e' 5% da cota queimada em lixo — e o
+   * resultado aparecia como NO_MAIN_CONTENT, parecendo limitacao do produto
+   * em vez de dado podre.
+   */
+  if (record.file === null || record.error !== null) {
     linhas.push({
       id: entry.id, tipo: entry.tipo, lang: entry.lang, palavras: 0,
       sentencas: 0, analisaveis: 0, escalados: 0, taxa: 0, sourced: 0,
       unsourced: 0, opinion: 0, score: '-', custo: 0, cacheRead: 0,
-      erro: 'sem fixture',
+      erro: record.error ?? 'sem fixture',
     });
     continue;
   }

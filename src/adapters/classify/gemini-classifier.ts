@@ -1,4 +1,4 @@
-import { analysisError } from '../../core/domain/errors.js';
+import { analysisError, isAnalysisError } from '../../core/domain/errors.js';
 import type { ClaimCategory, Classification } from '../../core/domain/classification.js';
 import type { ExtractedContent } from '../../core/domain/extracted-content.js';
 import type { Sentence } from '../../core/domain/sentence.js';
@@ -59,6 +59,25 @@ export interface GeminiClassifierOptions {
   readonly maxTokens?: number;
   /** Default: `fetch` global. */
   readonly transport?: GeminiTransport;
+  /** Espera antes da unica retentativa. Default 1500 ms; 0 em teste. */
+  readonly retryDelayMs?: number;
+}
+
+/**
+ * Marca no texto da causa, e nao um campo novo no erro.
+ *
+ * `AnalysisError` e' contrato do dominio, e acrescentar campo so' para o retry
+ * de um adapter vazaria detalhe de infraestrutura para o nucleo. A marca sai
+ * do texto antes de qualquer coisa chegar ao usuario — ela vive so' entre
+ * `postarUmaVez` e `postar`.
+ */
+const MARCA_TRANSITORIA = '[transitorio] ';
+
+function ehTentavelDeNovo(causa: unknown): boolean {
+  if (!isAnalysisError(causa)) return false;
+  if (causa.code !== 'CLASSIFIER_FAILED') return false;
+  const mensagem = causa.cause instanceof Error ? causa.cause.message : '';
+  return mensagem.startsWith(MARCA_TRANSITORIA);
 }
 
 /**
@@ -137,6 +156,28 @@ function ehCotaEsgotada(status: number, corpo: unknown): boolean {
 }
 
 /**
+ * Falha TRANSITORIA do provedor — vale tentar de novo uma vez.
+ *
+ * MEDIDO, duas vezes no mesmo dia e no mesmo artigo grande: a API devolveu
+ * `503 UNAVAILABLE` com "The request timed out. Please try again.". Na
+ * semeadura da vitrine a segunda tentativa passou; na calibracao nao houve
+ * segunda tentativa, e o artigo saiu da amostra como CLASSIFIER_FAILED.
+ *
+ * Sem retry, um lote que expira derruba a ANALISE INTEIRA — e o usuario refaz
+ * tudo, inclusive os lotes que ja tinham dado certo. Com uma tentativa, o caso
+ * comum se resolve sozinho.
+ *
+ * 429 NAO entra aqui de proposito: cota esgotada nao melhora tentando de novo,
+ * e insistir so' queimaria o que restou.
+ */
+function ehTransitorio(status: number, corpo: unknown): boolean {
+  if (status === 503 || status === 504) return true;
+  const erro = objeto(objeto(corpo)?.['error']);
+  const estado = erro?.['status'];
+  return estado === 'UNAVAILABLE' || estado === 'DEADLINE_EXCEEDED';
+}
+
+/**
  * Modelo inexistente, aposentado ou fora do alcance desta chave.
  *
  * MEDIDO, nao hipotetico: o Gemini aposentou `gemini-2.0-flash` durante o
@@ -163,7 +204,32 @@ export class GeminiClassifier implements ClaimClassifier {
         fetch(url, { method: init.method, headers: init.headers, body: init.body }));
   }
 
+  /**
+   * Uma tentativa extra, so' para falha transitoria. Ver `ehTransitorio`.
+   *
+   * A espera existe para nao repetir no mesmo instante em que o provedor ja'
+   * esta' engasgado — repetir imediatamente costuma achar o mesmo problema.
+   */
   private async postar(
+    metodo: 'generateContent' | 'countTokens',
+    corpo: unknown,
+    jaPago: ClassifierUsage,
+  ): Promise<Record<string, unknown>> {
+    try {
+      return await this.postarUmaVez(metodo, corpo, jaPago);
+    } catch (causa) {
+      if (!ehTentavelDeNovo(causa)) throw causa;
+      await this.esperar(this.options.retryDelayMs ?? 1_500);
+      return this.postarUmaVez(metodo, corpo, jaPago);
+    }
+  }
+
+  private async esperar(ms: number): Promise<void> {
+    if (ms <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async postarUmaVez(
     metodo: 'generateContent' | 'countTokens',
     corpo: unknown,
     jaPago: ClassifierUsage,
@@ -213,7 +279,10 @@ export class GeminiClassifier implements ClaimClassifier {
       }
       throw analysisError(
         'CLASSIFIER_FAILED',
-        new Error(`HTTP ${resposta.status}: ${texto.slice(0, 400)}`),
+        new Error(
+          `${ehTransitorio(resposta.status, json) ? MARCA_TRANSITORIA : ''}` +
+            `HTTP ${resposta.status}: ${texto.slice(0, 400)}`,
+        ),
         null,
         usageOuNulo(jaPago),
       );

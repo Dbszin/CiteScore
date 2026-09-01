@@ -102,7 +102,13 @@ function respostaOk(
   };
 }
 
-const OPCOES = { apiKey: 'AIza-teste', model: 'gemini-2.5-flash', maxSentencesPerCall: 3 };
+const OPCOES = {
+  apiKey: 'AIza-teste',
+  model: 'gemini-2.5-flash',
+  maxSentencesPerCall: 3,
+  // Sem espera: o teste prova o COMPORTAMENTO da retentativa, nao o relogio.
+  retryDelayMs: 0,
+};
 
 function classificador(transport: GeminiTransport): GeminiClassifier {
   return new GeminiClassifier({ ...OPCOES, transport });
@@ -292,6 +298,112 @@ describe('GeminiClassifier — cota esgotada', () => {
     await expect(
       classificador(transport).classify(sentences(1), content()),
     ).rejects.toMatchObject({ code: 'CLASSIFIER_FAILED' });
+  });
+});
+
+describe('GeminiClassifier — falha transitória', () => {
+  /*
+   * MEDIDO duas vezes no mesmo dia, no mesmo artigo grande: a API devolveu
+   * `503 UNAVAILABLE` com "The request timed out". Na semeadura da vitrine a
+   * segunda tentativa passou; na calibração não houve segunda, e o artigo
+   * saiu da amostra como falha.
+   *
+   * Sem retry, um lote que expira derruba a ANÁLISE INTEIRA, e o usuário refaz
+   * tudo — inclusive os lotes que já tinham dado certo.
+   */
+  it('503 é tentado DE NOVO, e a segunda tentativa vale', async () => {
+    const { transport, calls } = transporte((n) =>
+      n === 1
+        ? { status: 503, corpo: { error: { status: 'UNAVAILABLE' } } }
+        : { corpo: respostaOk([0]) },
+    );
+
+    const resultado = await classificador(transport).classify(
+      sentences(1),
+      content(),
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(resultado.classifications).toHaveLength(1);
+  });
+
+  it('UNAVAILABLE sem 503 também é transitório', async () => {
+    const { transport, calls } = transporte((n) =>
+      n === 1
+        ? { status: 500, corpo: { error: { status: 'UNAVAILABLE' } } }
+        : { corpo: respostaOk([0]) },
+    );
+
+    await classificador(transport).classify(sentences(1), content());
+    expect(calls).toHaveLength(2);
+  });
+
+  it('tenta de novo UMA vez, não em laço', async () => {
+    // Insistir num provedor engasgado piora o engasgo, e num free tier
+    // queimaria a cota que restou.
+    const { transport, calls } = transporte(() => ({
+      status: 503,
+      corpo: { error: { status: 'UNAVAILABLE' } },
+    }));
+
+    await expect(
+      classificador(transport).classify(sentences(1), content()),
+    ).rejects.toMatchObject({ code: 'CLASSIFIER_FAILED' });
+
+    expect(calls).toHaveLength(2);
+  });
+
+  it('COTA esgotada NÃO é tentada de novo', async () => {
+    // Cota não melhora tentando outra vez, e insistir queima o que sobrou.
+    const { transport, calls } = transporte(() => ({
+      status: 429,
+      corpo: { error: { status: 'RESOURCE_EXHAUSTED' } },
+    }));
+
+    await expect(
+      classificador(transport).classify(sentences(1), content()),
+    ).rejects.toMatchObject({ code: 'CLASSIFIER_QUOTA_EXHAUSTED' });
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it('modelo indisponível NÃO é tentado de novo', async () => {
+    // Configuração errada não se conserta insistindo.
+    const { transport, calls } = transporte(() => ({
+      status: 404,
+      corpo: { error: { status: 'NOT_FOUND' } },
+    }));
+
+    await expect(
+      classificador(transport).classify(sentences(1), content()),
+    ).rejects.toMatchObject({ code: 'CLASSIFIER_UNAVAILABLE' });
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it('erro NÃO transitório não é tentado de novo', async () => {
+    /*
+     * Este teste substituiu um que era VAZIO.
+     *
+     * O anterior checava que a marca interna do retry não aparecia em
+     * `userMessage` — mas `userMessage` vem do mapa de mensagens e nunca
+     * carregou a causa, então a asserção era verdadeira por construção e não
+     * protegia nada. Uma sabotagem passou por ela: esvaziar a marca faz
+     * `startsWith('')` valer sempre, e TODO CLASSIFIER_FAILED passaria a ser
+     * retentado — inclusive 500 genérico, que não melhora insistindo.
+     *
+     * O invariante que importa é a contagem de chamadas.
+     */
+    const { transport, calls } = transporte(() => ({
+      status: 500,
+      corpo: { error: { status: 'INTERNAL' } },
+    }));
+
+    await expect(
+      classificador(transport).classify(sentences(1), content()),
+    ).rejects.toMatchObject({ code: 'CLASSIFIER_FAILED' });
+
+    expect(calls).toHaveLength(1);
   });
 });
 

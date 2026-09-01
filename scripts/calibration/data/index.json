@@ -10,7 +10,7 @@
     "status": 200,
     "finalUrl": "https://ahrefs.com/blog/seo-meta-tags/",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 886610,
+    "bytes": 895304,
     "file": "en-seo-ahrefs.html",
     "error": null
   },
@@ -40,7 +40,7 @@
     "status": 200,
     "finalUrl": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Introduction",
     "contentType": "text/html",
-    "bytes": 207693,
+    "bytes": 207839,
     "file": "en-tech-mdn.html",
     "error": null
   },
@@ -55,7 +55,7 @@
     "status": 200,
     "finalUrl": "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 1086291,
+    "bytes": 1086090,
     "file": "en-wiki-transformer.html",
     "error": null
   },
@@ -70,7 +70,7 @@
     "status": 200,
     "finalUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 681861,
+    "bytes": 681787,
     "file": "en-lista-wikipedia.html",
     "error": null
   },
@@ -85,7 +85,7 @@
     "status": 200,
     "finalUrl": "https://ahrefs.com/blog/canonical-tags/",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 841297,
+    "bytes": 848770,
     "file": "en-curto-ahrefs.html",
     "error": null
   },
@@ -102,7 +102,7 @@
     "contentType": "text/html; charset=utf-8",
     "bytes": 28326,
     "file": "pt-seo-rdstation.html",
-    "error": null
+    "error": "SOFT_404: HTTP 200 com apenas 68 caracteres de texto visivel"
   },
   {
     "entry": {
@@ -115,7 +115,7 @@
     "status": 200,
     "finalUrl": "https://neilpatel.com/training/ecommerce-unlocked/seo/",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 350974,
+    "bytes": 334165,
     "file": "pt-seo-neilpatel.html",
     "error": null
   },
@@ -130,7 +130,7 @@
     "status": 200,
     "finalUrl": "https://analoghq.ai/blog/br/marketing-de-conteudo/",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 208909,
+    "bytes": 211225,
     "file": "pt-mkt-rockcontent.html",
     "error": null
   },
@@ -145,7 +145,7 @@
     "status": 200,
     "finalUrl": "https://developer.mozilla.org/pt-BR/docs/Web/JavaScript/Guide/Introduction",
     "contentType": "text/html",
-    "bytes": 233632,
+    "bytes": 233774,
     "file": "pt-tech-mdn.html",
     "error": null
   },
@@ -160,23 +160,23 @@
     "status": 200,
     "finalUrl": "https://pt.wikipedia.org/wiki/Intelig%C3%AAncia_artificial",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 668435,
+    "bytes": 678382,
     "file": "pt-wiki-ia.html",
     "error": null
   },
   {
     "entry": {
       "id": "pt-lista-rios",
-      "url": "https://pt.wikipedia.org/wiki/Lista_dos_maiores_rios_do_Brasil",
+      "url": "https://pt.wikipedia.org/wiki/Lista_de_rios_do_Brasil",
       "lang": "pt-BR",
       "tipo": "LISTA-TABELA",
       "expectativa": "stress test PT-BR de lista/tabela"
     },
-    "status": 404,
-    "finalUrl": "https://pt.wikipedia.org/wiki/Lista_dos_maiores_rios_do_Brasil",
+    "status": 200,
+    "finalUrl": "https://pt.wikipedia.org/wiki/Lista_de_rios_do_Brasil",
     "contentType": "text/html; charset=UTF-8",
-    "bytes": 53927,
-    "file": null,
-    "error": "HTTP 404"
+    "bytes": 158162,
+    "file": "pt-lista-rios.html",
+    "error": null
   }
 ]

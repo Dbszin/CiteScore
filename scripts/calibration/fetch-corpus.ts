@@ -14,6 +14,14 @@ import path from 'node:path';
 import { decodeHtml } from '../../src/adapters/fetch/charset.js';
 import { CORPUS, type CorpusEntry } from './urls.js';
 
+/**
+ * Piso de texto visivel para um fixture ser considerado bom.
+ *
+ * Mil caracteres e' menos que qualquer artigo do corpus e muito mais que
+ * qualquer pagina de erro. O soft 404 que motivou a guarda tinha 68.
+ */
+const MIN_TEXTO_VISIVEL = 1_000;
+
 const DATA_DIR = path.join(process.cwd(), 'scripts', 'calibration', 'data');
 const INDEX_FILE = path.join(DATA_DIR, 'index.json');
 
@@ -68,6 +76,30 @@ for (const entry of CORPUS) {
     const file = `${entry.id}.html`;
     fs.writeFileSync(path.join(DATA_DIR, file), html, 'utf8');
 
+    /*
+     * STATUS 200 NÃO É O MESMO QUE CONTEÚDO.
+     *
+     * Um dos fixtures ficou dois meses no corpus como "OK": a URL do RD Station
+     * responde HTTP 200 com uma página "404: This page could not be found". O
+     * índice registrava sucesso, o arquivo era salvo, e toda calibração desde
+     * então incluiu uma casca de 68 caracteres — que aparecia como
+     * `NO_MAIN_CONTENT` e parecia limitação do produto, não dado podre.
+     *
+     * O tamanho já era a pista: 28 KB contra 200-800 KB dos demais. Mas ninguém
+     * olha tamanho de arquivo ao ler uma tabela de status.
+     *
+     * A guarda não tenta detectar "página de erro" — isso seria adivinhação.
+     * Ela mede TEXTO VISÍVEL, que é o que a calibração consome. Abaixo de mil
+     * caracteres não existe artigo, seja qual for a razão.
+     */
+    const textoVisivel = html
+      .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/giu, ' ')
+      .replace(/<[^>]+>/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim();
+
+    const suspeito = textoVisivel.length < MIN_TEXTO_VISIVEL;
+
     records.push({
       entry,
       status: response.status,
@@ -75,9 +107,17 @@ for (const entry of CORPUS) {
       contentType,
       bytes: buffer.byteLength,
       file,
-      error: null,
+      error: suspeito
+        ? `SOFT_404: HTTP ${response.status} com apenas ${textoVisivel.length} ` +
+          `caracteres de texto visivel`
+        : null,
     });
-    console.log(`OK ${(buffer.byteLength / 1024).toFixed(0)}KB`);
+    console.log(
+      suspeito
+        ? `SUSPEITO ${(buffer.byteLength / 1024).toFixed(0)}KB mas so ` +
+          `${textoVisivel.length} chars de texto — provavel soft 404`
+        : `OK ${(buffer.byteLength / 1024).toFixed(0)}KB`,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     records.push({
