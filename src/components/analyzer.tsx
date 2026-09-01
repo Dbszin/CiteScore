@@ -6,6 +6,7 @@ import type { SentenceId } from '../core/domain/sentence.js';
 import { Alert, ArrowRight, Close, ExternalLink, Info } from './icons.js';
 import type { LegendEntry, ScorePanel, Segment } from './report-model.js';
 import {
+  buildCoverageNotice,
   buildLegend,
   buildRecord,
   buildScorePanel,
@@ -255,6 +256,7 @@ function Report({
   const segments = buildSegments(analysis);
   const legend = buildLegend(segments);
   const record = buildRecord(analysis);
+  const cobertura = buildCoverageNotice(analysis);
   const alvo = useRef<HTMLDivElement>(null);
 
   /*
@@ -281,6 +283,16 @@ function Report({
       <div className="panel rise">
         <Method url={analysis.methodology.methodologyUrl} text={analysis.methodology.disclaimer} />
 
+        {/*
+          Aviso de cobertura ANTES dos outros: ele qualifica os numeros que
+          vem logo abaixo, e chegar depois deles seria chegar tarde.
+        */}
+        {cobertura !== null && (
+          <p className="warn">
+            <Alert />
+            <span>{cobertura}</span>
+          </p>
+        )}
         {analysis.truncated && (
           <p className="warn">
             <Alert />

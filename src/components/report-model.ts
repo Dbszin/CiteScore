@@ -123,6 +123,59 @@ function summarize(sourced: number, unsourced: number): string {
 }
 
 /**
+ * Abaixo desta razão de blocos classificados, a tela AVISA que mediu só uma
+ * parte da página.
+ *
+ * O número sai da medição, não de gosto. Razão de analisáveis sobre o total,
+ * no corpus e nas landing pages testadas:
+ *
+ *   MDN (doc técnico)        0,667  artigo
+ *   Plausible (LP)           0,667  LP que parece artigo
+ *   Moz (pilar SEO)          0,554  artigo
+ *   Ahrefs (blog SEO)        0,545  artigo
+ *   ─────────────────────── 0,50 ── o aviso começa aqui
+ *   Resend (LP)              0,463
+ *   Wikipedia (lista de PIB) 0,431  conteúdo legítimo, mas quase só lista
+ *   Stripe (LP)              0,404
+ *   RD Station (LP)          0,397
+ *   ─────────────────────── 0,35 ── abaixo daqui a guarda RECUSA
+ *
+ * Os três artigos ficam acima e não são avisados. As landing pages que
+ * escorregam pela guarda ficam abaixo e passam a ser. A lista da Wikipedia
+ * também — e ali o aviso está CERTO: a página é conteúdo real, e ainda assim
+ * foi medida em menos da metade dos blocos.
+ *
+ * Por que isto existe: sem o aviso, uma landing page recebe número medido em
+ * 40% da página e nada na tela diz isso. É o mesmo modo de falha que motivou a
+ * guarda de página-índice — "lixo plausível, não erro, que é pior porque
+ * passa" — só que num degrau em que a guarda não pega.
+ */
+const RAZAO_MINIMA_SEM_AVISO = 0.5;
+
+/**
+ * Aviso de cobertura, ou `null` quando a página foi medida por inteiro.
+ *
+ * NÃO precisa de campo novo no contrato: a razão é derivável do que o payload
+ * já carrega — `sentences.length` e `breakdown.analyzableSentences`.
+ */
+export function buildCoverageNotice(analysis: Analysis): string | null {
+  const total = analysis.sentences.length;
+  const classificadas = analysis.breakdown.analyzableSentences;
+  if (total === 0) return null;
+
+  const razao = classificadas / total;
+  if (razao >= RAZAO_MINIMA_SEM_AVISO) return null;
+
+  const pct = Math.round(razao * 100);
+  return (
+    `Classificamos ${classificadas} dos ${total} blocos de texto desta página ` +
+    `(${pct}%). O restante era título, item de lista ou fragmento sem verbo — ` +
+    `não são afirmações e ficaram fora da conta. As proporções descrevem a ` +
+    `parte classificada, não a página inteira.`
+  );
+}
+
+/**
  * Um trecho do texto, com o motivo pelo qual está do jeito que está.
  *
  * `unanalyzed` existe porque havia duas ausências diferentes renderizando
