@@ -22,6 +22,7 @@ import {
   ClaudeClassifier,
   createAnthropicClient,
 } from '../src/adapters/classify/claude-classifier.js';
+import { GeminiClassifier } from '../src/adapters/classify/gemini-classifier.js';
 import { HybridClassifier } from '../src/adapters/classify/hybrid-classifier.js';
 import { ReadabilityExtractor } from '../src/adapters/extract/readability-extractor.js';
 import { IntlSentenceSegmenter } from '../src/adapters/segment/intl-sentence-segmenter.js';
@@ -29,7 +30,10 @@ import { isAnalysisError } from '../src/core/domain/errors.js';
 import { assessIndexPage } from '../src/core/domain/index-page-guard.js';
 import { computeScore } from '../src/core/scoring/compute-score.js';
 import { SCORE_VERSION } from '../src/core/scoring/weights.js';
-import type { ClassifierUsage } from '../src/core/ports/claim-classifier.js';
+import type {
+  ClaimClassifier,
+  ClassifierUsage,
+} from '../src/core/ports/claim-classifier.js';
 import type { FetchedPage } from '../src/core/ports/content-fetcher.js';
 import type { CorpusEntry } from './calibration/urls.js';
 
@@ -85,11 +89,52 @@ function csvEscape(value: string): string {
 }
 
 const env = loadEnvLocal();
-const apiKey = env['ANTHROPIC_API_KEY'];
-const model = env['ANTHROPIC_MODEL'] ?? 'claude-haiku-4-5';
-if (apiKey === undefined || apiKey.length === 0) {
-  throw new Error('ANTHROPIC_API_KEY vazia');
+
+/*
+ * O classificador segue o PROVEDOR CONFIGURADO, e nao o Claude cravado.
+ *
+ * Ate' aqui este script montava `ClaudeClassifier` direto. Depois que a
+ * producao passou a rodar sobre Gemini, isso deixou de ser detalhe: calibrar
+ * com um classificador que nao e' o que roda produz uma distribuicao que nao
+ * descreve o produto — e a distribuicao existe justamente para decidir a forma
+ * final do composto.
+ *
+ * Nao e' hipotese. Os dois provedores divergiram muito no mesmo corpus, e a
+ * investigacao mostrou que o Claude contava mencao a entidade nomeada como
+ * atribuicao. Uma calibracao feita com ele teria herdado esse erro inteiro.
+ */
+const provedor = env['LLM_PROVIDER'] ?? 'gemini';
+const maxSentencesPerCall = Number(env['MAX_SENTENCES_PER_LLM_CALL'] ?? '80');
+
+function montarClassificador(): { llm: ClaimClassifier; model: string } {
+  if (provedor === 'anthropic') {
+    const apiKey = env['ANTHROPIC_API_KEY'];
+    if (apiKey === undefined || apiKey.length === 0) {
+      throw new Error('ANTHROPIC_API_KEY vazia com LLM_PROVIDER=anthropic');
+    }
+    const model = env['ANTHROPIC_MODEL'] ?? 'claude-haiku-4-5';
+    return {
+      llm: new ClaudeClassifier(createAnthropicClient(apiKey), {
+        model,
+        maxSentencesPerCall,
+      }),
+      model,
+    };
+  }
+
+  const apiKey = env['GEMINI_API_KEY'];
+  if (apiKey === undefined || apiKey.length === 0) {
+    throw new Error('GEMINI_API_KEY vazia com LLM_PROVIDER=gemini');
+  }
+  const model = env['GEMINI_MODEL'] ?? 'gemini-2.5-flash';
+  return {
+    llm: new GeminiClassifier({ apiKey, model, maxSentencesPerCall }),
+    model,
+  };
 }
+
+const escolhido = montarClassificador();
+const model = escolhido.model;
 
 const index = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'index.json'), 'utf8'),
@@ -97,11 +142,9 @@ const index = JSON.parse(
 
 const extractor = new ReadabilityExtractor();
 const segmenter = new IntlSentenceSegmenter();
-const llm = new ClaudeClassifier(createAnthropicClient(apiKey), {
-  model,
-  maxSentencesPerCall: Number(env['MAX_SENTENCES_PER_LLM_CALL'] ?? '80'),
-});
-const hybrid = new HybridClassifier(llm);
+const hybrid = new HybridClassifier(escolhido.llm);
+
+console.log(`provedor ${provedor} · modelo ${model} · lote ${maxSentencesPerCall}\n`);
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 

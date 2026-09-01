@@ -79,37 +79,51 @@ A cor nunca é o único canal: cada categoria tem traço próprio, legível em e
 
 ## O que ele encontra
 
-Três artigos de referência, medidos com o classificador atual:
+Corpus de referência, medido pelo pipeline completo com o classificador atual:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                                    COM FONTE    SEM FONTE(*)     │
-├──────────────────────────────────────────────────────────────────┤
-│   Ahrefs · meta tags                 ███ 13%        80%          │
-│   post de blog, cita de verdade                                  │
-│                                                                  │
-│   MDN · introdução a JavaScript      ██   6%        93%          │
-│   documentação técnica                                           │
-│                                                                  │
-│   Moz · o que é SEO                  █    2%        98%          │
-│   página pilar, muito definicional                               │
-├──────────────────────────────────────────────────────────────────┤
-│   (*) das AFIRMAÇÕES — opinião fora do denominador               │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│  artigo                      tipo de texto        c/fonte   composto  │
+├───────────────────────────────────────────────────────────────────────┤
+│  Moz · o que é SEO           pilar de marketing        2%        2    │
+│  MDN · introdução a JS       documentação técnica     10%       10    │
+│  Ahrefs · canonical tags     post curto               11%       13    │
+│  Wikipedia · Transformer     artigo científico        47%       47    │
+│  Wikipedia · lista de PIB    tabela com fontes        67%       67    │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-Três autores, três tipos de texto. Mesmo no melhor dos casos — um post que de fato cita fontes — **4 em cada 5 afirmações factuais seguem sem sustentação**. Nos outros dois, quase todas.
+Dois achados, e o segundo é o que importa para quem escreve.
 
-O padrão também é informativo: quanto mais definicional o texto, menos ele cita. É esse mapa que o texto marcado expõe frase a frase, e é isso que dá para corrigir antes de publicar.
+**Conteúdo de marketing quase não cita.** Nos três primeiros, entre 84% e 98%
+das afirmações factuais seguem sem fonte. Mesmo um post que cita de verdade
+deixa 4 em cada 5 penduradas.
+
+**E a medida separa tipos de texto.** Um artigo científico da Wikipedia tira 47,
+uma tabela de PIB com referências tira 67, uma página pilar de SEO tira 2. A
+ordem apareceu sozinha: ninguém calibrou peso para produzi-la.
 
 > [!NOTE]
-> **Estes números substituem uma medição anterior que estava inflada, e a correção vale ser contada.**
+> **Esta tabela corrige uma medição anterior que estava inflada**, e a correção
+> vale ser contada.
 >
-> A calibração de agosto usava `claude-haiku-4-5` e encontrava 21-23% de afirmações com fonte. Ao trocar o classificador, o número caiu para 2-6%. A divergência foi investigada sentença por sentença, e o classificador antigo estava **contando menção a entidade nomeada como se fosse atribuição** — chamava de "com fonte" frases como *"SEO stands for search engine optimization"*, *"MozBar: a browser extension showing SEO metrics"* e *"Loading performance is how fast your page content appears (Largest Contentful Paint)"*. Nenhuma cita fonte alguma; o parêntese é um nome, não uma referência.
+> A calibração de agosto usava `claude-haiku-4-5` e encontrava 21-23% de
+> afirmações com fonte em todo artigo — quatro pontos separando textos
+> deliberadamente diferentes. A divergência foi investigada sentença por
+> sentença, e o classificador antigo estava **contando menção a entidade nomeada
+> como se fosse atribuição**: chamava de "com fonte" frases como *"MozBar: a
+> browser extension showing SEO metrics"* ou *"Loading performance is how fast
+> your page content appears (Largest Contentful Paint)"*. O parêntese é um nome,
+> não uma referência.
 >
-> É o mesmo erro que a decisão sobre o pré-filtro já havia registrado num outro ponto — **data não é fonte** — reaparecendo como **nome de produto não é fonte**.
+> Como o erro acontecia em qualquer texto, ele empurrava todos os artigos para a
+> mesma faixa — e a conclusão de que "a régua não discrimina" era efeito dele,
+> não da fórmula.
 >
-> A divergência **não é uniforme**, e isso é o mais revelador: no artigo da Ahrefs, um post que cita de verdade, os dois classificadores praticamente concordam (13% contra 15%). O erro antigo aparecia justamente em texto **definicional e em lista de produto**, onde entidade nomeada abunda e era confundida com atribuição.
+> **Ressalvas honestas:** cinco artigos, não onze — a cota gratuita do provedor
+> acabou no meio da execução, e os textos em PT-BR ficaram de fora. E
+> `temperature: 0` reduz a variação entre execuções sem eliminá-la: o MDN deu
+> 6% numa medição e 10% noutra.
 
 <br>
 

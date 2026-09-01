@@ -216,3 +216,71 @@ campo derivado — e aí sim isso vira mudança de tipo.
 - [ ] Reavaliar os pesos 0,6 / 0,4 **depois** da distribuição, nunca antes
 - [ ] `docs/` e `context-resume.md` citam os números antigos (17, 23, 24) como
       se fossem medição — precisam da ressalva
+
+---
+
+# SEGUNDA EMENDA — a régua discrimina, e a compressão era do classificador
+
+**Data:** 2026-09-01
+**Base:** calibração sobre o corpus com `gemini-2.5-flash`, o classificador de produção
+
+## O que mudou
+
+A primeira emenda concluiu que **a régua é comprimida e não discrimina**, e
+rebaixou o composto para a ficha técnica por causa disso. A conclusão estava
+certa para os dados que existiam, e os dados estavam errados.
+
+Aquela medição usava `claude-haiku-4-5`, e ela dava para todo artigo um número
+entre 21 e 25 — quatro pontos de separação entre tipos de texto deliberadamente
+diferentes. Com o classificador atual, a mesma fórmula e os mesmos pesos dão:
+
+| artigo | tipo de texto | densidade | lacuna | composto |
+|---|---|---|---|---|
+| Moz — o que é SEO | pilar de marketing | 2% | 98% | **2** |
+| MDN — introdução a JS | documentação técnica | 10% | 89% | **10** |
+| Ahrefs — canonical tags | post curto | 11% | 84% | **13** |
+| Wikipedia — Transformer | artigo científico | 47% | 53% | **47** |
+| Wikipedia — lista de PIB | tabela com fontes | 67% | 33% | **67** |
+
+**Amplitude de 65 pontos**, contra 4. E a ordem tem validade aparente: conteúdo
+de marketing embaixo, referência científica em cima, documentação técnica no
+meio. Ninguém precisou calibrar peso nenhum para isso aparecer.
+
+## A causa da compressão
+
+Não era a fórmula. Era o classificador anterior contando **menção a entidade
+nomeada como se fosse atribuição** — investigado sentença a sentença e
+registrado no README. Ele chamava de "com fonte" frases como *"MozBar: a browser
+extension showing SEO metrics"*. Como esse erro acontecia em qualquer texto, ele
+empurrava todos os artigos para a mesma faixa de densidade, e a fórmula
+herdava a compressão sem ter culpa.
+
+É o mesmo padrão que a [ADR-006](006-prefiltro-deixa-de-decidir.md) já havia
+registrado: uma conclusão de projeto construída sobre uma medição enviesada.
+
+## O que isto NÃO decide
+
+**Não reabre a apresentação do composto por conta própria.** A primeira emenda o
+rebaixou para a ficha técnica, e ele continua lá. Promovê-lo de volta a figura
+principal exige mais do que amplitude:
+
+- **Só cinco artigos foram medidos.** A cota gratuita do provedor acabou no meio
+  da execução, e os três artigos em PT-BR ficaram de fora. Não há evidência
+  entre idiomas.
+- **A reprodutibilidade não foi remedida com este classificador.** Entre duas
+  execuções do MDN, a densidade deu 6% e depois 10% — cinco contra oito
+  sentenças de 82. `temperature: 0` reduz a variação; não a elimina.
+- **Faixa nomeada continua sem base.** Amplitude não é o mesmo que distribuição:
+  cinco pontos não dizem onde ficam os limiares de "bom" e "ruim", e inventá-los
+  agora repetiria o erro que a ADR-003 cometeu com os pesos.
+
+## O que destrava
+
+- Completar o corpus, incluindo PT-BR — cabe na cota de um dia
+- Rodar o mesmo artigo N vezes com o classificador atual, para medir a variação
+  que sobrou
+- **Só então** o Architect decide a forma final: número, faixa, ou permanência
+  na ficha técnica
+
+Os pesos 0,6 / 0,4 seguem sendo ponto de partida, e agora há um corpus com
+amplitude real para questioná-los — o que a primeira emenda pedia e não tinha.
