@@ -113,10 +113,20 @@ export const CORPUS: readonly CorpusEntry[] = [
   },
   {
     id: 'pt-lista-rios',
-    // A URL anterior (Lista_dos_maiores_rios_do_Brasil) devolve 404 — o
-    // indice do corpus registrava isso honestamente e o artigo nunca foi
-    // baixado. Esta responde 200 com 158 KB, e serve ao mesmo proposito:
-    // uma pagina de LISTA-TABELA em portugues.
+    // A URL anterior (Lista_dos_maiores_rios_do_Brasil) devolve 404 — o indice
+    // registrava isso honestamente e o artigo nunca foi baixado. Esta responde
+    // 200 com 158 KB.
+    //
+    // ⚠️ MAS ELA NAO PREENCHE A VAGA. Medida em 2026-09-01: 368 palavras
+    // extraidas, 6 sentencas analisaveis, razao 0,06 — a guarda de
+    // pagina-indice a RECUSA, e com razao. E' tabela quase pura, sem a prosa
+    // introdutoria que a contraparte em ingles (List of countries by GDP, 58
+    // analisaveis, score 67) tem.
+    //
+    // Ou seja: o slot LISTA-TABELA em portugues segue VAZIO. Trocar a URL
+    // consertou o 404 e nao consertou o corpus. Achar uma lista em pt-BR com
+    // prosa suficiente e' escolha de corpus, nao conserto — fica registrado em
+    // vez de disfarcado.
     url: 'https://pt.wikipedia.org/wiki/Lista_de_rios_do_Brasil',
     lang: 'pt-BR',
     tipo: 'LISTA-TABELA',

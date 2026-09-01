@@ -178,8 +178,37 @@ let abortado = false;
 console.log(`\n=== CALIBRAÇÃO — modelo ${model}, score v${SCORE_VERSION} ===`);
 console.log(`Teto de gasto: US$ ${TETO_DOLARES.toFixed(2)}\n`);
 
+/*
+ * Filtro opcional por prefixo de id: `npx tsx scripts/calibrate.ts 2 pt-`.
+ *
+ * Existe porque a cota gratuita e' de 20 requisicoes por dia, e o corpus
+ * inteiro cabe nela por pouco. Poder rodar so' o que FALTA — em vez de
+ * remedir o que ja' esta' medido — e' a diferenca entre fechar a lacuna e
+ * gastar a cota confirmando o que ja' se sabe.
+ */
+const filtro = process.argv[3] ?? '';
+
+/*
+ * ⚠️ EXECUCAO FILTRADA NAO SOBRESCREVE O RELATORIO COMPLETO.
+ *
+ * Nao e' precaucao teorica: aconteceu. Rodar com `pt-` gravou por cima do
+ * resumo, e os cinco artigos em ingles medidos no dia anterior sumiram do
+ * arquivo — recuperados do git, mas so' porque estavam commitados.
+ *
+ * Um relatorio PARCIAL com o nome do completo e' pior que nenhum: quem abrir
+ * depois le "nenhum artigo analisado com sucesso" e conclui que a calibracao
+ * falhou, quando na verdade ela nem rodou sobre o corpus inteiro.
+ */
+const sufixo = filtro === '' ? '' : `-${filtro.replace(/[^a-z0-9]/giu, '')}`;
+if (filtro !== '') {
+  console.log(`filtro: ids comecando com "${filtro}"`);
+  console.log(`saida:  calibracao-resumo${sufixo}.json — o completo fica intacto\n`);
+}
+
 for (const record of index) {
   const { entry } = record;
+
+  if (filtro !== '' && !entry.id.startsWith(filtro)) continue;
 
   /*
    * Pula sem fixture E pula fixture MARCADO como ruim.
@@ -347,9 +376,9 @@ if (analisados.length === 0) {
   if (abortado) console.log('\n*** EXECUÇÃO ABORTADA PELO TETO DE CUSTO ***');
 }
 
-const csvPath = path.join(OUT_DIR, 'calibracao-sentencas.csv');
+const csvPath = path.join(OUT_DIR, `calibracao-sentencas${sufixo}.csv`);
 fs.writeFileSync(csvPath, csv.join('\n'), 'utf8');
-const jsonPath = path.join(OUT_DIR, 'calibracao-resumo.json');
+const jsonPath = path.join(OUT_DIR, `calibracao-resumo${sufixo}.json`);
 fs.writeFileSync(
   jsonPath,
   JSON.stringify({ model, scoreVersion: SCORE_VERSION, custoTotal, linhas }, null, 2),
