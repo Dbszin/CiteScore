@@ -135,7 +135,7 @@ Em produção, `REDIS_URL` e `REDIS_TOKEN` passam a ser obrigatórias: a presen�
 | `LLM_PROVIDER` | `gemini` | Quem classifica: `gemini` ou `anthropic` |
 | `GEMINI_API_KEY` | — | **Obrigatória** com `LLM_PROVIDER=gemini` |
 | `ANTHROPIC_API_KEY` | — | **Obrigatória** com `LLM_PROVIDER=anthropic` |
-| `GEMINI_MODEL` | `gemini-2.0-flash` | Qual modelo do Gemini usar |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Qual modelo do Gemini usar |
 | `ANTHROPIC_MODEL` | `claude-haiku-4-5` | Ponto único de troca de tier |
 | `MAX_CONTENT_BYTES` | `2000000` | Teto de bytes baixados |
 | `MAX_ANALYZABLE_SENTENCES` | `400` | Teto de sentenças analisadas |

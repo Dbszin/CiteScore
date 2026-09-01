@@ -109,6 +109,17 @@ describe('Mapa de status HTTP', () => {
     expect(cota).toMatch(/não é erro seu/iu);
   });
 
+  it('serviço indisponível não manda tentar de novo NEM promete prazo', () => {
+    // Separado de QUOTA porque o remédio é outro: cota volta sozinha, modelo
+    // aposentado não volta até alguém arrumar a configuração. Prometer
+    // "amanhã" ali seria tão falso quanto "tente novamente".
+    const indisponivel = USER_MESSAGES.CLASSIFIER_UNAVAILABLE;
+    expect(indisponivel).not.toMatch(/tente novamente/iu);
+    expect(indisponivel).not.toMatch(/amanhã|renovar/iu);
+    expect(indisponivel).not.toBe(USER_MESSAGES.CLASSIFIER_QUOTA_EXHAUSTED);
+    expect(indisponivel).toMatch(/não é erro seu/iu);
+  });
+
   it('cota esgotada é 503, não 429', () => {
     // Mesma razão de BUDGET_EXCEEDED: a cota do provedor é GLOBAL. Responder
     // 429 a quem fez uma única requisição afirma algo falso sobre ele.

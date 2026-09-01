@@ -31,6 +31,7 @@ export type AnalysisErrorCode =
   | 'CLASSIFIER_REFUSED'
   | 'CLASSIFIER_INVALID_OUTPUT'
   | 'CLASSIFIER_QUOTA_EXHAUSTED'
+  | 'CLASSIFIER_UNAVAILABLE'
   // guardas de custo
   | 'RATE_LIMITED'
   | 'BUDGET_EXCEEDED'
@@ -111,6 +112,21 @@ export const USER_MESSAGES: Record<AnalysisErrorCode, string> = {
   CLASSIFIER_QUOTA_EXHAUSTED:
     'A cota de análises deste período foi atingida. Isto não é erro seu — ' +
     'o serviço volta a analisar quando a cota renovar.',
+  /*
+   * O modelo configurado não existe ou não está disponível para esta conta.
+   *
+   * Separado de QUOTA porque o remédio é OUTRO: cota volta sozinha, isto não
+   * volta até alguém arrumar a configuração. Prometer "amanhã" seria falso.
+   *
+   * Não é hipótese: o Gemini aposentou `gemini-2.0-flash` durante o
+   * desenvolvimento, e a chamada passou a devolver 404. Qualquer deploy fixado
+   * num modelo que o provedor retira passa por isto — e sem código próprio,
+   * todo visitante veria "tente novamente" indefinidamente enquanto ninguém
+   * percebe que o serviço está parado.
+   */
+  CLASSIFIER_UNAVAILABLE:
+    'O serviço de análise está indisponível no momento. Não é erro seu, ' +
+    'e já estamos sabendo.',
   CLASSIFIER_REFUSED: 'Não foi possível analisar esse conteúdo.',
   CLASSIFIER_INVALID_OUTPUT:
     'Falha ao processar o resultado da análise. Tente novamente.',

@@ -32,10 +32,22 @@ export class UpstashRedisClient implements RedisClient {
 
   async get(key: string): Promise<string | null> {
     return this.executar('get', async () => {
-      // O Upstash desserializa JSON por conta própria; normalizamos para
-      // string porque a interface promete string.
+      /*
+       * O Upstash DESSERIALIZA JSON por conta propria, e a interface aqui
+       * promete string — entao e' preciso reserializar.
+       *
+       * A versao anterior fazia `String(valor)`, o que estava CERTO enquanto o
+       * Redis so' guardava contador: `String(42)` da' "42". No instante em que
+       * passou a guardar uma analise em JSON, `String(objeto)` virou
+       * "[object Object]" — 15 bytes no lugar de 35 mil, e o cache lia de volta
+       * um lixo que a validacao de forma recusava.
+       *
+       * O sintoma era o pior possivel: nenhum erro. O cache simplesmente nunca
+       * acertava, e a unica pista era a conta continuar subindo.
+       */
       const valor = await this.redis.get<unknown>(key);
-      return valor === null || valor === undefined ? null : String(valor);
+      if (valor === null || valor === undefined) return null;
+      return typeof valor === 'string' ? valor : JSON.stringify(valor);
     });
   }
 

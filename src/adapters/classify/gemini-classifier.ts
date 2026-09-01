@@ -136,6 +136,23 @@ function ehCotaEsgotada(status: number, corpo: unknown): boolean {
   return erro?.['status'] === 'RESOURCE_EXHAUSTED';
 }
 
+/**
+ * Modelo inexistente, aposentado ou fora do alcance desta chave.
+ *
+ * MEDIDO, nao hipotetico: o Gemini aposentou `gemini-2.0-flash` durante o
+ * desenvolvimento e passou a devolver 404 com NOT_FOUND. Sem esta distincao o
+ * caso virava CLASSIFIER_FAILED, cuja mensagem manda tentar de novo — e tentar
+ * de novo nunca resolveria, porque o remedio e' trocar a configuracao.
+ *
+ * 403 entra junto: chave sem permissao para o modelo tem o mesmo remedio.
+ */
+function ehIndisponivel(status: number, corpo: unknown): boolean {
+  if (status === 404 || status === 403) return true;
+  const erro = objeto(objeto(corpo)?.['error']);
+  const estado = erro?.['status'];
+  return estado === 'NOT_FOUND' || estado === 'PERMISSION_DENIED';
+}
+
 export class GeminiClassifier implements ClaimClassifier {
   private readonly transport: GeminiTransport;
 
@@ -186,6 +203,14 @@ export class GeminiClassifier implements ClaimClassifier {
           usageOuNulo(jaPago),
         );
       }
+      if (ehIndisponivel(resposta.status, json)) {
+        throw analysisError(
+          'CLASSIFIER_UNAVAILABLE',
+          new Error(texto.slice(0, 400)),
+          null,
+          usageOuNulo(jaPago),
+        );
+      }
       throw analysisError(
         'CLASSIFIER_FAILED',
         new Error(`HTTP ${resposta.status}: ${texto.slice(0, 400)}`),
@@ -225,9 +250,27 @@ export class GeminiClassifier implements ClaimClassifier {
     let total = 0;
 
     for (const batch of chunk(analyzable, this.options.maxSentencesPerCall)) {
+      /*
+       * `countTokens` NAO aceita `systemInstruction` no topo do corpo — devolve
+       * 400 "Unknown name systemInstruction". Ele exige o envelope
+       * `generateContentRequest`, que e' onde o campo existe.
+       *
+       * Isso NAO e' detalhe de forma: a rubrica do sistema tem ~800 tokens e e'
+       * a maior parte da entrada. Contar sem ela subestimaria o custo, e a
+       * guarda de orcamento — que decide a partir desta contagem — cobraria a
+       * menos em toda analise. Erro de contabilidade silencioso, do tipo que so'
+       * aparece na fatura.
+       *
+       * O modelo vai prefixado com `models/` aqui dentro, ao contrario da URL.
+       */
       const corpo = await this.postar(
         'countTokens',
-        this.conteudo(system, renderBatch(batch)),
+        {
+          generateContentRequest: {
+            model: `models/${this.options.model}`,
+            ...this.conteudo(system, renderBatch(batch)),
+          },
+        },
         emptyUsage(),
       );
       total += inteiro(corpo['totalTokens']);
@@ -256,6 +299,25 @@ export class GeminiClassifier implements ClaimClassifier {
           ...this.conteudo(system, renderBatch(batch)),
           generationConfig: {
             temperature: 0,
+            /*
+             * Desliga o raciocinio. E' o mesmo lever de custo da ADR-005
+             * aplicado a este provedor, e aqui ele tambem e' de CORRETUDE.
+             *
+             * MEDIDO contra a API real, num lote de 20 sentencas:
+             *   com pensamento : 473 de saida + 461 de pensamento = 1371 total
+             *   thinkingBudget 0: 453 de saida +   0 de pensamento =  890 total
+             *
+             * O pensamento custava quase tanto quanto a resposta, para uma
+             * resposta praticamente identica — e, pior, ele conta contra
+             * `maxOutputTokens`. Num lote de 80 sentencas isso estourava o
+             * teto e a saida vinha TRUNCADA, com o JSON pela metade. Foi assim
+             * que o primeiro pipeline real falhou.
+             *
+             * Classificar em tres categorias nao precisa de cadeia de
+             * raciocinio: a decisao esta na presenca de marcador de fonte na
+             * propria frase.
+             */
+            thinkingConfig: { thinkingBudget: 0 },
             maxOutputTokens:
               this.options.maxTokens ??
               deriveMaxOutputTokens(this.options.maxSentencesPerCall),

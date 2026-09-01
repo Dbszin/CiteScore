@@ -102,7 +102,7 @@ function respostaOk(
   };
 }
 
-const OPCOES = { apiKey: 'AIza-teste', model: 'gemini-2.0-flash', maxSentencesPerCall: 3 };
+const OPCOES = { apiKey: 'AIza-teste', model: 'gemini-2.5-flash', maxSentencesPerCall: 3 };
 
 function classificador(transport: GeminiTransport): GeminiClassifier {
   return new GeminiClassifier({ ...OPCOES, transport });
@@ -248,6 +248,41 @@ describe('GeminiClassifier — cota esgotada', () => {
     ).rejects.toMatchObject({ code: 'CLASSIFIER_QUOTA_EXHAUSTED' });
   });
 
+  it('modelo aposentado (404) vira CLASSIFIER_UNAVAILABLE', async () => {
+    /*
+     * MEDIDO, nao hipotetico: o Gemini aposentou `gemini-2.0-flash` durante o
+     * desenvolvimento. Sem este caminho, o 404 virava CLASSIFIER_FAILED, cuja
+     * mensagem manda tentar de novo — e tentar de novo nunca resolveria,
+     * porque o remedio e' trocar a configuracao. Todo visitante veria "tente
+     * novamente" indefinidamente enquanto o servico estivesse parado.
+     */
+    const { transport } = transporte(() => ({
+      status: 404,
+      corpo: {
+        error: {
+          code: 404,
+          status: 'NOT_FOUND',
+          message: 'This model models/gemini-2.0-flash is no longer available.',
+        },
+      },
+    }));
+
+    await expect(
+      classificador(transport).classify(sentences(1), content()),
+    ).rejects.toMatchObject({ code: 'CLASSIFIER_UNAVAILABLE' });
+  });
+
+  it('chave sem permissao (403) tem o mesmo remedio, logo o mesmo codigo', async () => {
+    const { transport } = transporte(() => ({
+      status: 403,
+      corpo: { error: { status: 'PERMISSION_DENIED' } },
+    }));
+
+    await expect(
+      classificador(transport).classify(sentences(1), content()),
+    ).rejects.toMatchObject({ code: 'CLASSIFIER_UNAVAILABLE' });
+  });
+
   it('outro erro HTTP continua sendo CLASSIFIER_FAILED', async () => {
     const { transport } = transporte(() => ({
       status: 500,
@@ -385,6 +420,29 @@ describe('GeminiClassifier — liquidação da reserva (ADR-009)', () => {
 });
 
 describe('GeminiClassifier — contagem de tokens', () => {
+  it('o systemInstruction VAI na contagem', async () => {
+    /*
+     * MEDIDO contra a API real: `countTokens` recusa `systemInstruction` no
+     * topo com 400, e exige o envelope `generateContentRequest`.
+     *
+     * Nao e' detalhe de forma. A rubrica do sistema tem ~800 tokens e e' a
+     * maior parte da entrada; conta-la de fora subestimaria o custo, e a
+     * guarda de orcamento — que decide a partir desta contagem — cobraria a
+     * menos em TODA analise. Erro de contabilidade silencioso.
+     */
+    const { transport, calls } = transporte(() => ({ corpo: { totalTokens: 1 } }));
+    await classificador(transport).estimateInputTokens(sentences(1), content());
+
+    const envelope = calls[0]?.body['generateContentRequest'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(envelope, 'countTokens precisa do envelope').toBeDefined();
+    expect(envelope?.['systemInstruction']).toBeDefined();
+    expect(envelope?.['model']).toBe('models/gemini-2.5-flash');
+    // E o campo NAO pode estar no topo, que e' o que a API recusa.
+    expect(calls[0]?.body['systemInstruction']).toBeUndefined();
+  });
+
   it('soma `totalTokens` de cada lote', async () => {
     const { transport, calls } = transporte(() => ({
       corpo: { totalTokens: 300 },

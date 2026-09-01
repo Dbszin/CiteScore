@@ -36,6 +36,9 @@ export const HTTP_STATUS: Record<AnalysisErrorCode, number> = {
   // GLOBAL, consumida por todos os visitantes somados. Responder 429 a quem fez
   // uma unica requisicao afirma algo falso sobre o comportamento dele.
   CLASSIFIER_QUOTA_EXHAUSTED: 503,
+  // Tambem 503: o servico existe e esta fora do ar por configuracao. 502
+  // ("gateway ruim") culparia o provedor por um erro que e' nosso.
+  CLASSIFIER_UNAVAILABLE: 503,
 
   // Guardas de custo.
   //

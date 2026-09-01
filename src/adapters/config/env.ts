@@ -42,11 +42,21 @@ const EnvSchema = z.object({
   ANTHROPIC_MODEL: z.string().min(1).default('claude-opus-5'),
 
   /**
-   * O modelo do Gemini. Qual está na cota gratuita e com que limites MUDA com
-   * o tempo — por isso é variável de ambiente com default conservador, e não
-   * constante no código. Confira os limites atuais antes de contar com eles.
+   * O modelo do Gemini.
+   *
+   * É variável de ambiente, e não constante no código, porque MODELO SE
+   * APOSENTA. Não é precaução teórica: o default anterior era
+   * `gemini-2.0-flash`, e o provedor o retirou durante o desenvolvimento — a
+   * API passou a devolver 404. Um deploy com o nome cravado no código teria
+   * quebrado sem caminho de conserto que não fosse novo release.
+   *
+   * `gemini-2.5-flash` foi verificado contra a API real. NÃO se usa alias como
+   * `gemini-flash-latest` de propósito: alias troca o modelo por baixo, e este
+   * produto fixou `temperature: 0` justamente para o mesmo texto dar o mesmo
+   * resultado. Um modelo que muda sozinho reintroduz a variação pela porta dos
+   * fundos.
    */
-  GEMINI_MODEL: z.string().min(1).default('gemini-2.0-flash'),
+  GEMINI_MODEL: z.string().min(1).default('gemini-2.5-flash'),
 
   /** Caps de conteúdo — defesa 2 de protecao-custo/spec.md. */
   MAX_CONTENT_BYTES: intFromEnv(2_000_000),

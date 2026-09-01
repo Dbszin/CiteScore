@@ -97,8 +97,16 @@ try {
   const tokens = await classifier.estimateInputTokens(sentences, content);
   console.log(`countTokens ....... ${tokens} tokens de entrada`);
 } catch (causa) {
-  console.error('countTokens FALHOU:', causa instanceof Error ? causa.message : causa);
-  if (isAnalysisError(causa)) console.error('  código:', causa.code);
+  console.error('countTokens FALHOU');
+  if (isAnalysisError(causa)) {
+    console.error('  codigo:', causa.code);
+    // A CAUSA e' o que diz o que houve. Sem ela o diagnostico so' repete o
+    // codigo, que e' generico por construcao — foi o que aconteceu na primeira
+    // execucao real: "CLASSIFIER_FAILED" escondia um 404 de modelo aposentado.
+    console.error('  causa:', causa.cause instanceof Error ? causa.cause.message : causa.cause);
+  } else {
+    console.error(' ', causa instanceof Error ? causa.message : causa);
+  }
   process.exit(1);
 }
 

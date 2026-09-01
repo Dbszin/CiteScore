@@ -32,7 +32,7 @@ describe('loadEnv', () => {
   it('aceita ambiente mínimo e aplica os defaults', () => {
     const env = loadEnv(valido);
     expect(env.LLM_PROVIDER).toBe('gemini');
-    expect(env.GEMINI_MODEL).toBe('gemini-2.0-flash');
+    expect(env.GEMINI_MODEL).toBe('gemini-2.5-flash');
     expect(env.ANTHROPIC_MODEL).toBe('claude-opus-5');
     expect(env.MAX_ANALYZABLE_SENTENCES).toBe(400);
     expect(env.RATE_LIMIT_PER_HOUR).toBe(10);
@@ -71,8 +71,8 @@ describe('loadEnv', () => {
   it('permite trocar o modelo do Gemini por variável', () => {
     // Qual modelo está na cota gratuita muda com o tempo — por isso é
     // variável, e não constante no código.
-    const env = loadEnv({ ...valido, GEMINI_MODEL: 'gemini-2.5-flash' });
-    expect(env.GEMINI_MODEL).toBe('gemini-2.5-flash');
+    const env = loadEnv({ ...valido, GEMINI_MODEL: 'gemini-3.5-flash' });
+    expect(env.GEMINI_MODEL).toBe('gemini-3.5-flash');
   });
 
   it('a mensagem de erro diz o que fazer', () => {
